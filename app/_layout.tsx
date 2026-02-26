@@ -1,4 +1,6 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
+import { Session } from '@supabase/supabase-js';
+import * as Linking from 'expo-linking';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
@@ -8,7 +10,7 @@ import { ToastProvider } from '../lib/toast';
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [session, setSession] = useState(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const segments = useSegments();
   const router = useRouter();
@@ -50,6 +52,39 @@ export default function RootLayout() {
       router.replace('/(tabs)');
     }
   }, [session, segments, loading, fontsLoaded]);
+
+  // Handle deep links
+  useEffect(() => {
+    if (loading || !fontsLoaded || !session) return;
+
+    const handleDeepLink = (url: string) => {
+      const parsed = Linking.parse(url);
+      const path = parsed.path;
+
+      if (path?.startsWith('user/')) {
+        const userId = path.replace('user/', '');
+        router.push(`/user/${userId}`);
+      } else if (path?.startsWith('round/')) {
+        const roundId = path.replace('round/', '');
+        router.push(`/round/${roundId}`);
+      } else if (path?.startsWith('course/')) {
+        const courseId = path.replace('course/', '');
+        router.push(`/course/${courseId}`);
+      }
+    };
+
+    // Handle app opened from deep link
+    Linking.getInitialURL().then((url) => {
+      if (url) handleDeepLink(url);
+    });
+
+    // Handle deep link while app is open
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      handleDeepLink(url);
+    });
+
+    return () => subscription.remove();
+  }, [loading, fontsLoaded, session]);
 
   if (!fontsLoaded || loading) {
     return null;

@@ -46,9 +46,12 @@ export default function PartnersScreen() {
 
       // Extract the friend profiles
       const friends = (data || [])
-        .map(item => item.following)
+        .map(item => {
+          const f = Array.isArray(item.following) ? item.following[0] : item.following;
+          return f;
+        })
         .filter(Boolean)
-        .map(f => ({
+        .map((f: any) => ({
           id: f.id,
           name: f.name || 'Unknown',
           username: f.username || '',

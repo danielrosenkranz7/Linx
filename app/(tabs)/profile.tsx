@@ -3,7 +3,19 @@ import Slider from '@react-native-community/slider';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, Image, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  Image,
+  Modal,
+  ScrollView,
+  Share,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { supabase } from '../../lib/supabase';
 
 export default function ProfileScreen() {
@@ -17,9 +29,110 @@ export default function ProfileScreen() {
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
 
+  // Find Friends Modal state
+  const [showFindFriends, setShowFindFriends] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
+
   useEffect(() => {
     loadProfile();
   }, []);
+
+  // Search users when query changes
+  useEffect(() => {
+    if (searchQuery.length >= 2) {
+      searchUsers(searchQuery);
+    } else {
+      setSearchResults([]);
+    }
+  }, [searchQuery]);
+
+  // Load following IDs when modal opens
+  useEffect(() => {
+    if (showFindFriends && profile?.id) {
+      loadFollowingIds(profile.id);
+    }
+  }, [showFindFriends, profile?.id]);
+
+  const loadFollowingIds = async (userId: string) => {
+    const { data } = await supabase
+      .from('friendships')
+      .select('following_id')
+      .eq('follower_id', userId);
+
+    if (data) {
+      setFollowingIds(new Set(data.map(f => f.following_id)));
+    }
+  };
+
+  const searchUsers = async (query: string) => {
+    setIsSearching(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .neq('id', user.id)
+        .or(`name.ilike.%${query}%,username.ilike.%${query}%`)
+        .limit(20);
+
+      setSearchResults(data || []);
+    } catch (error) {
+      console.error('Search error:', error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleFollowToggle = async (userId: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const isFollowing = followingIds.has(userId);
+
+    try {
+      if (isFollowing) {
+        await supabase
+          .from('friendships')
+          .delete()
+          .eq('follower_id', user.id)
+          .eq('following_id', userId);
+
+        setFollowingIds(prev => {
+          const next = new Set(prev);
+          next.delete(userId);
+          return next;
+        });
+        setFollowingCount(prev => prev - 1);
+      } else {
+        await supabase
+          .from('friendships')
+          .insert([{ follower_id: user.id, following_id: userId }]);
+
+        setFollowingIds(prev => new Set(prev).add(userId));
+        setFollowingCount(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error('Error toggling follow:', error);
+    }
+  };
+
+  const handleUserPress = (userId: string) => {
+    setShowFindFriends(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    router.push(`/user/${userId}`);
+  };
+
+  const closeFindFriends = () => {
+    setShowFindFriends(false);
+    setSearchQuery('');
+    setSearchResults([]);
+  };
 
   const loadProfile = async () => {
     try {
@@ -189,8 +302,11 @@ export default function ProfileScreen() {
 
   const handleShareProfile = async () => {
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       await Share.share({
-        message: `Check out ${profile?.name || 'my'} golf profile on Linx!`,
+        message: `Check out ${profile?.name || 'my'} golf profile on Linx! linx://user/${user.id}`,
       });
     } catch (error) {
       console.error('Error sharing:', error);
@@ -351,6 +467,15 @@ export default function ProfileScreen() {
               <Ionicons name="share-outline" size={20} color="#16a34a" />
             </TouchableOpacity>
           </View>
+
+          {/* Find Friends Button */}
+          <TouchableOpacity
+            style={styles.findFriendsButton}
+            onPress={() => setShowFindFriends(true)}
+          >
+            <Ionicons name="search" size={20} color="#fff" />
+            <Text style={styles.findFriendsButtonText}>Find Friends</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Stats */}
@@ -553,6 +678,103 @@ export default function ProfileScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* Find Friends Modal */}
+      <Modal
+        visible={showFindFriends}
+        animationType="slide"
+        transparent
+        onRequestClose={closeFindFriends}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Find Friends</Text>
+              <TouchableOpacity onPress={closeFindFriends} style={styles.modalClose}>
+                <Ionicons name="close" size={28} color="#1a1a1a" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={20} color="#9ca3af" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search for golfers..."
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus
+                placeholderTextColor="#9ca3af"
+              />
+              {isSearching && <ActivityIndicator size="small" color="#16a34a" />}
+            </View>
+
+            {/* Search Results */}
+            <ScrollView style={styles.searchResults} showsVerticalScrollIndicator={false}>
+              {searchQuery === '' && (
+                <View style={styles.searchEmptyState}>
+                  <Ionicons name="people-outline" size={48} color="#d1d5db" />
+                  <Text style={styles.searchEmptyText}>Search for golfers to follow</Text>
+                  <Text style={styles.searchEmptySubtext}>Find friends by name or username</Text>
+                </View>
+              )}
+
+              {searchQuery !== '' && searchResults.length === 0 && !isSearching && (
+                <View style={styles.searchEmptyState}>
+                  <Ionicons name="search-outline" size={48} color="#d1d5db" />
+                  <Text style={styles.searchEmptyText}>No users found</Text>
+                  <Text style={styles.searchEmptySubtext}>Try a different search term</Text>
+                </View>
+              )}
+
+              {searchResults.map((user) => {
+                const isFollowing = followingIds.has(user.id);
+                return (
+                  <TouchableOpacity
+                    key={user.id}
+                    style={styles.searchUserCard}
+                    onPress={() => handleUserPress(user.id)}
+                    activeOpacity={0.7}
+                  >
+                    {user.avatar_url ? (
+                      <Image source={{ uri: user.avatar_url }} style={styles.searchAvatar} />
+                    ) : (
+                      <View style={styles.searchAvatarPlaceholder}>
+                        <Text style={styles.searchAvatarText}>{user.name?.[0] || '?'}</Text>
+                      </View>
+                    )}
+
+                    <View style={styles.searchUserInfo}>
+                      <Text style={styles.searchUserName}>{user.name || 'Anonymous'}</Text>
+                      {user.username && (
+                        <Text style={styles.searchUserUsername}>@{user.username}</Text>
+                      )}
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.searchFollowButton, isFollowing && styles.searchFollowingButton]}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        handleFollowToggle(user.id);
+                      }}
+                    >
+                      <Ionicons
+                        name={isFollowing ? 'checkmark' : 'person-add'}
+                        size={18}
+                        color={isFollowing ? '#16a34a' : '#fff'}
+                      />
+                      <Text style={[styles.searchFollowText, isFollowing && styles.searchFollowingText]}>
+                        {isFollowing ? 'Following' : 'Follow'}
+                      </Text>
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -691,6 +913,23 @@ const styles = StyleSheet.create({
     borderColor: '#16a34a',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  findFriendsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+    backgroundColor: '#16a34a',
+  },
+  findFriendsButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
+    fontFamily: 'Inter',
   },
   statsSection: {
     flexDirection: 'row',
@@ -996,5 +1235,148 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     padding: 8,
+  },
+  // Find Friends Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    height: '75%',
+    paddingBottom: 40,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    position: 'relative',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    fontFamily: 'Inter',
+  },
+  modalClose: {
+    position: 'absolute',
+    right: 16,
+    padding: 4,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    margin: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  searchIcon: {
+    marginRight: 12,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: 'Inter',
+    color: '#1a1a1a',
+  },
+  searchResults: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  searchEmptyState: {
+    alignItems: 'center',
+    paddingVertical: 48,
+  },
+  searchEmptyText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6b7280',
+    marginTop: 12,
+    fontFamily: 'Inter',
+  },
+  searchEmptySubtext: {
+    fontSize: 14,
+    color: '#9ca3af',
+    marginTop: 4,
+    fontFamily: 'Inter',
+  },
+  searchUserCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  searchAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 12,
+  },
+  searchAvatarPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#16a34a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  searchAvatarText: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#fff',
+    fontFamily: 'Inter',
+  },
+  searchUserInfo: {
+    flex: 1,
+  },
+  searchUserName: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 2,
+    fontFamily: 'Inter',
+  },
+  searchUserUsername: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontFamily: 'Inter',
+  },
+  searchFollowButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 16,
+    backgroundColor: '#16a34a',
+  },
+  searchFollowingButton: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#16a34a',
+  },
+  searchFollowText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+    fontFamily: 'Inter',
+  },
+  searchFollowingText: {
+    color: '#16a34a',
   },
 });

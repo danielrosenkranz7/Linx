@@ -61,59 +61,117 @@ export default function MapScreen() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setErrorMsg('Location permission denied');
-        // Still load courses with a default location
-        await loadCourses(37.7749, -122.4194); // Default to SF
+        setRegion({
+          latitude: 37.7749,
+          longitude: -122.4194,
+          ...DEFAULT_DELTA,
+        });
+        setLoading(false);
+        // Load courses in background
+        loadCourses(37.7749, -122.4194, 10);
         return;
       }
 
-      // Get current location
-      const currentLocation = await Location.getCurrentPositionAsync({
+      // Try to get last known location first (instant)
+      const lastKnown = await Location.getLastKnownPositionAsync();
+      if (lastKnown) {
+        const quickRegion = {
+          latitude: lastKnown.coords.latitude,
+          longitude: lastKnown.coords.longitude,
+          ...DEFAULT_DELTA,
+        };
+        setRegion(quickRegion);
+        setLastSearchedRegion(quickRegion);
+        setCurrentMapRegion(quickRegion);
+        setLocation(lastKnown);
+        setLoading(false); // Show map immediately
+
+        // Start loading courses in background
+        loadCourses(lastKnown.coords.latitude, lastKnown.coords.longitude, 10);
+      }
+
+      // Get accurate location in background
+      Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
+      }).then(currentLocation => {
+        setLocation(currentLocation);
+
+        // Only update if significantly different from last known
+        if (!lastKnown) {
+          const newRegion = {
+            latitude: currentLocation.coords.latitude,
+            longitude: currentLocation.coords.longitude,
+            ...DEFAULT_DELTA,
+          };
+          setRegion(newRegion);
+          setLastSearchedRegion(newRegion);
+          setCurrentMapRegion(newRegion);
+          setLoading(false);
+          loadCourses(currentLocation.coords.latitude, currentLocation.coords.longitude, 10);
+        }
       });
-      setLocation(currentLocation);
 
-      const newRegion = {
-        latitude: currentLocation.coords.latitude,
-        longitude: currentLocation.coords.longitude,
-        ...DEFAULT_DELTA,
-      };
-      setRegion(newRegion);
-      setLastSearchedRegion(newRegion);
-      setCurrentMapRegion(newRegion);
-
-      // Load courses near user
-      await loadCourses(currentLocation.coords.latitude, currentLocation.coords.longitude);
+      // If no last known location, wait for current
+      if (!lastKnown) {
+        const currentLocation = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+        setLocation(currentLocation);
+        const newRegion = {
+          latitude: currentLocation.coords.latitude,
+          longitude: currentLocation.coords.longitude,
+          ...DEFAULT_DELTA,
+        };
+        setRegion(newRegion);
+        setLastSearchedRegion(newRegion);
+        setCurrentMapRegion(newRegion);
+        setLoading(false);
+        loadCourses(currentLocation.coords.latitude, currentLocation.coords.longitude, 10);
+      }
     } catch (error) {
       handleError(error, 'Getting location');
       setErrorMsg('Failed to get location');
-      await loadCourses(37.7749, -122.4194);
-    } finally {
+      setRegion({
+        latitude: 37.7749,
+        longitude: -122.4194,
+        ...DEFAULT_DELTA,
+      });
       setLoading(false);
+      loadCourses(37.7749, -122.4194, 10);
     }
   };
 
-  const loadCourses = async (lat: number, lng: number, radiusMiles: number = 15) => {
+  const loadCourses = async (lat: number, lng: number, radiusMiles: number = 10) => {
     try {
-      // Convert miles to meters for Overpass API (cap at 50km for speed)
-      const radiusMeters = Math.min(Math.round(radiusMiles * 1609.34), 50000);
+      // Load local courses FIRST (instant) - show something immediately
+      await loadCoursesFromDatabase(lat, lng, radiusMiles);
 
-      console.log('Fetching golf courses for location:', lat, lng, 'radius:', radiusMeters);
+      // Then fetch from OSM in background to supplement
+      const radiusMeters = Math.min(Math.round(radiusMiles * 1609.34), 30000); // Cap at 30km for speed
+
+      console.log('Fetching golf courses from OSM:', lat, lng, 'radius:', radiusMeters);
 
       // Overpass API query - only ways and relations (nodes are rarely golf courses)
-      const overpassQuery = `[out:json][timeout:15];(way["leisure"="golf_course"](around:${radiusMeters},${lat},${lng});relation["leisure"="golf_course"](around:${radiusMeters},${lat},${lng}););out center tags;`;
+      const overpassQuery = `[out:json][timeout:10];(way["leisure"="golf_course"](around:${radiusMeters},${lat},${lng});relation["leisure"="golf_course"](around:${radiusMeters},${lat},${lng}););out center tags;`;
 
-      // Use a faster Overpass mirror
+      // Use a faster Overpass mirror with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
       const response = await fetch('https://overpass.kumi.systems/api/interpreter', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
         },
         body: `data=${encodeURIComponent(overpassQuery)}`,
+        signal: controller.signal,
       });
+
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         console.error('Overpass API HTTP error:', response.status);
-        await loadCoursesFromDatabase(lat, lng, radiusMiles);
+        // Already have local courses, just return
         return;
       }
 
@@ -122,8 +180,8 @@ export default function MapScreen() {
       console.log('Overpass results:', data.elements?.length || 0);
 
       if (!data.elements || data.elements.length === 0) {
-        console.log('No golf courses found in this area');
-        setCourses([]);
+        console.log('No additional golf courses from OSM');
+        // Keep existing local courses
         return;
       }
 
@@ -247,19 +305,27 @@ export default function MapScreen() {
       // Sort by distance
       mergedCourses.sort((a, b) => (a.distance || 0) - (b.distance || 0));
 
-      // Deduplicate by ID (keep first occurrence which has shortest distance)
-      const seen = new Set<string>();
-      const uniqueCourses = mergedCourses.filter(course => {
-        if (seen.has(course.id)) return false;
-        seen.add(course.id);
-        return true;
-      });
+      // Merge with existing courses (from local DB)
+      setCourses(prevCourses => {
+        const seen = new Set<string>();
+        // Add existing local courses first
+        prevCourses.forEach(c => seen.add(c.id));
 
-      setCourses(uniqueCourses);
+        // Add new OSM courses that aren't duplicates
+        const newCourses = mergedCourses.filter(course => {
+          if (seen.has(course.id)) return false;
+          seen.add(course.id);
+          return true;
+        });
+
+        // Combine and sort by distance
+        const combined = [...prevCourses, ...newCourses];
+        combined.sort((a, b) => (a.distance || 0) - (b.distance || 0));
+        return combined;
+      });
     } catch (error) {
-      handleError(error, 'Loading courses');
-      // Fall back to local database
-      await loadCoursesFromDatabase(lat, lng, radiusMiles);
+      // OSM failed, but we already have local courses loaded
+      console.log('OSM fetch failed, using local courses only');
     }
   };
 

@@ -127,7 +127,7 @@ export default function CourseReviewsScreen() {
 
       {item.score && (
         <Text style={styles.scoreText}>
-          Shot a {item.score} •{' '}
+          Shot {[8, 11, 18].includes(item.score) || (item.score >= 80 && item.score <= 89) ? 'an' : 'a'} {item.score} •{' '}
           {item.holes === 'front9'
             ? 'Front 9'
             : item.holes === 'back9'

@@ -44,8 +44,7 @@ export default function RatingScreen() {
           course:courses(
             id,
             name,
-            city,
-            state
+            location
           )
         `)
         .eq('user_id', user.id)
@@ -72,7 +71,7 @@ export default function RatingScreen() {
               id: course.id,
               name: course.name,
               rating: round.rating,
-              location: [course.city, course.state].filter(Boolean).join(', '),
+              location: course.location || '',
             });
           }
         }

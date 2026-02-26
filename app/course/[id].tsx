@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Image, Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Modal, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../../lib/supabase';
 
 export default function CourseDetailScreen() {
@@ -166,6 +166,16 @@ const loadCourseDetails = async () => {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   };
 
+  const handleShare = async () => {
+    try {
+      await Share.share({
+        message: `Check out ${course?.name} on Linx! linx://course/${id}`,
+      });
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
   // Get 6 random photos for preview
   const previewPhotos = allPhotos.length > 0 
     ? allPhotos.sort(() => 0.5 - Math.random()).slice(0, 6)
@@ -183,20 +193,25 @@ const loadCourseDetails = async () => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
         >
           <Ionicons name="chevron-back" size={28} color="#1a1a1a" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Course</Text>
-        <TouchableOpacity onPress={handleBookmarkToggle}>
-          <Ionicons 
-            name={isBookmarked ? "bookmark" : "bookmark-outline"} 
-            size={24} 
-            color="#16a34a" 
-          />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={handleShare} style={styles.headerActionButton}>
+            <Ionicons name="share-outline" size={24} color="#16a34a" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleBookmarkToggle} style={styles.headerActionButton}>
+            <Ionicons
+              name={isBookmarked ? 'bookmark' : 'bookmark-outline'}
+              size={24}
+              color="#16a34a"
+            />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -278,7 +293,7 @@ const loadCourseDetails = async () => {
 
               {round.score && (
                 <Text style={styles.reviewScore}>
-                  Shot a {round.score} • {round.holes === 'front9' ? 'Front 9' : round.holes === 'back9' ? 'Back 9' : '18 holes'}
+                  Shot {[8, 11, 18].includes(round.score) || (round.score >= 80 && round.score <= 89) ? 'an' : 'a'} {round.score} • {round.holes === 'front9' ? 'Front 9' : round.holes === 'back9' ? 'Back 9' : '18 holes'}
                 </Text>
               )}
 
@@ -387,6 +402,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1a1a1a',
     fontFamily: 'Inter',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+  },
+  headerActionButton: {
+    padding: 4,
   },
   content: {
     flex: 1,

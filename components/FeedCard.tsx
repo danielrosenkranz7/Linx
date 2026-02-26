@@ -2,6 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
+  ActionSheetIOS,
+  Alert,
   Animated,
   Dimensions,
   Image,
@@ -9,6 +11,7 @@ import {
   Modal,
   Platform,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -16,6 +19,7 @@ import {
   View,
 } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { toast } from '../lib/toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -40,6 +44,10 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
   const [submittingComment, setSubmittingComment] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [reportReason, setReportReason] = useState('');
+  const [reportDetails, setReportDetails] = useState('');
+  const [submittingReport, setSubmittingReport] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
   const [keyboardHeight] = useState(new Animated.Value(0));
@@ -261,6 +269,84 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
     return date.toLocaleDateString();
   };
 
+  const handleMoreOptions = () => {
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', 'Report'],
+          cancelButtonIndex: 0,
+          destructiveButtonIndex: 1,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 1) {
+            setShowReportModal(true);
+          }
+        }
+      );
+    } else {
+      // Android fallback
+      Alert.alert(
+        'Options',
+        '',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Report', style: 'destructive', onPress: () => setShowReportModal(true) },
+        ]
+      );
+    }
+  };
+
+  const reportReasons = [
+    'Inappropriate content',
+    'Spam',
+    'Fake or misleading',
+    'Harassment',
+    'Other',
+  ];
+
+  const handleSubmitReport = async () => {
+    if (!reportReason) {
+      toast.error('Please select a reason');
+      return;
+    }
+
+    setSubmittingReport(true);
+    try {
+      const { error } = await supabase.from('reports').insert({
+        reporter_id: currentUserId,
+        content_type: 'round',
+        content_id: round.id,
+        reason: reportReason,
+        details: reportDetails.trim() || null,
+      });
+
+      if (error) throw error;
+
+      toast.success('Report submitted');
+      setShowReportModal(false);
+      setReportReason('');
+      setReportDetails('');
+    } catch (error) {
+      console.error('Error submitting report:', error);
+      toast.error('Failed to submit report');
+    } finally {
+      setSubmittingReport(false);
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      const userName = round.user?.name || 'Someone';
+      const courseName = round.course?.name || 'a course';
+
+      await Share.share({
+        message: `Check out ${userName}'s round at ${courseName} on Linx! linx://round/${round.id}`,
+      });
+    } catch (error) {
+      console.error('Error sharing:', error);
+    }
+  };
+
   return (
     <View style={styles.card}>
       {/* User Info */}
@@ -290,7 +376,12 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
             </Text>
           </View>
         </TouchableOpacity>
-        <Text style={styles.timestamp}>{formatDate(round.created_at)}</Text>
+        <View style={styles.headerRight}>
+          <Text style={styles.timestamp}>{formatDate(round.created_at)}</Text>
+          <TouchableOpacity onPress={handleMoreOptions} style={styles.moreButton}>
+            <Ionicons name="ellipsis-horizontal" size={20} color="#9ca3af" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Content Row: Info on left, Photos on right */}
@@ -307,7 +398,7 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
           {/* Score Info */}
           {round.score && (
             <Text style={styles.scoreText}>
-              Shot a {round.score} •{' '}
+              Shot {[8, 11, 18].includes(round.score) || (round.score >= 80 && round.score <= 89) ? 'an' : 'a'} {round.score} •{' '}
               {round.holes === 'front9' ? 'Front 9' : round.holes === 'back9' ? 'Back 9' : '18 holes'}
             </Text>
           )}
@@ -354,7 +445,7 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
           <Ionicons name="chatbubble-outline" size={20} color="#6b7280" />
           <Text style={styles.actionCount}>{commentsCount}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
           <Ionicons name="paper-plane-outline" size={20} color="#6b7280" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionButton} onPress={handleBookmark}>
@@ -585,6 +676,77 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
           )}
         </View>
       </Modal>
+
+      {/* Report Modal */}
+      <Modal
+        visible={showReportModal}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setShowReportModal(false)}
+      >
+        <View style={styles.reportModalOverlay}>
+          <View style={styles.reportModalContent}>
+            <View style={styles.reportModalHeader}>
+              <Text style={styles.reportModalTitle}>Report Content</Text>
+              <TouchableOpacity onPress={() => setShowReportModal(false)}>
+                <Ionicons name="close" size={28} color="#1a1a1a" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.reportModalSubtitle}>
+              Why are you reporting this post?
+            </Text>
+
+            <View style={styles.reportReasons}>
+              {reportReasons.map((reason) => (
+                <TouchableOpacity
+                  key={reason}
+                  style={[
+                    styles.reportReasonButton,
+                    reportReason === reason && styles.reportReasonButtonActive,
+                  ]}
+                  onPress={() => setReportReason(reason)}
+                >
+                  <Text
+                    style={[
+                      styles.reportReasonText,
+                      reportReason === reason && styles.reportReasonTextActive,
+                    ]}
+                  >
+                    {reason}
+                  </Text>
+                  {reportReason === reason && (
+                    <Ionicons name="checkmark" size={20} color="#16a34a" />
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TextInput
+              style={styles.reportDetailsInput}
+              placeholder="Additional details (optional)"
+              placeholderTextColor="#9ca3af"
+              value={reportDetails}
+              onChangeText={setReportDetails}
+              multiline
+              maxLength={500}
+            />
+
+            <TouchableOpacity
+              style={[
+                styles.reportSubmitButton,
+                (!reportReason || submittingReport) && styles.reportSubmitButtonDisabled,
+              ]}
+              onPress={handleSubmitReport}
+              disabled={!reportReason || submittingReport}
+            >
+              <Text style={styles.reportSubmitButtonText}>
+                {submittingReport ? 'Submitting...' : 'Submit Report'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -695,10 +857,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontFamily: 'Inter',
   },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   timestamp: {
     fontSize: 13,
     color: '#9ca3af',
     fontFamily: 'Inter',
+  },
+  moreButton: {
+    padding: 4,
   },
   ratingContainer: {
     marginBottom: 12,
@@ -982,5 +1152,91 @@ const styles = StyleSheet.create({
   thumbnailImage: {
     width: '100%',
     height: '100%',
+  },
+  // Report Modal styles
+  reportModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  reportModalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    paddingBottom: 40,
+  },
+  reportModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  reportModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    fontFamily: 'Inter',
+  },
+  reportModalSubtitle: {
+    fontSize: 15,
+    color: '#6b7280',
+    marginBottom: 20,
+    fontFamily: 'Inter',
+  },
+  reportReasons: {
+    gap: 8,
+    marginBottom: 16,
+  },
+  reportReasonButton: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  reportReasonButtonActive: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#16a34a',
+  },
+  reportReasonText: {
+    fontSize: 16,
+    color: '#1a1a1a',
+    fontFamily: 'Inter',
+  },
+  reportReasonTextActive: {
+    color: '#16a34a',
+    fontWeight: '600',
+  },
+  reportDetailsInput: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 15,
+    fontFamily: 'Inter',
+    color: '#1a1a1a',
+    backgroundColor: '#f9fafb',
+    minHeight: 80,
+    textAlignVertical: 'top',
+    marginBottom: 16,
+  },
+  reportSubmitButton: {
+    backgroundColor: '#ef4444',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  reportSubmitButtonDisabled: {
+    opacity: 0.5,
+  },
+  reportSubmitButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#fff',
+    fontFamily: 'Inter',
   },
 });

@@ -1,13 +1,10 @@
 import { usePathname, useRouter } from 'expo-router';
 import { Bell, Home, Map, Plus, User } from 'lucide-react-native';
-import { useState } from 'react';
 import { Platform, StyleSheet, TouchableOpacity, View } from 'react-native';
-import AddModal from './AddModal';
 
 export default function TabBar() {
   const router = useRouter();
   const pathname = usePathname();
-  const [showAddModal, setShowAddModal] = useState(false);
 
   const tabs = [
     { name: 'Home', icon: Home, route: '/(tabs)' },
@@ -27,46 +24,40 @@ export default function TabBar() {
 
   const handleTabPress = (tab: typeof tabs[0]) => {
     if (tab.isCenter) {
-      setShowAddModal(true);
+      // Go directly to course search
+      router.push('/add-round/search-course');
     } else if (tab.route) {
       router.push(tab.route as any);
     }
   };
 
   return (
-    <>
-      <View style={styles.container}>
-        <View style={styles.tabBar}>
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const active = isActive(tab.route);
+    <View style={styles.container}>
+      <View style={styles.tabBar}>
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          const active = isActive(tab.route);
 
-            return (
-              <TouchableOpacity
-                key={tab.name}
-                style={[
-                  styles.tab,
-                  tab.isCenter && styles.centerTab,
-                ]}
-                onPress={() => handleTabPress(tab)}
-                activeOpacity={0.7}
-              >
-                <Icon
-                  size={tab.isCenter ? 28 : 24}
-                  color={tab.isCenter ? '#fff' : (active ? '#16a34a' : '#6b7280')}
-                  strokeWidth={active ? 2.5 : 2}
-                />
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+          return (
+            <TouchableOpacity
+              key={tab.name}
+              style={[
+                styles.tab,
+                tab.isCenter && styles.centerTab,
+              ]}
+              onPress={() => handleTabPress(tab)}
+              activeOpacity={0.7}
+            >
+              <Icon
+                size={tab.isCenter ? 28 : 24}
+                color={tab.isCenter ? '#fff' : (active ? '#16a34a' : '#6b7280')}
+                strokeWidth={active ? 2.5 : 2}
+              />
+            </TouchableOpacity>
+          );
+        })}
       </View>
-
-      <AddModal 
-        visible={showAddModal} 
-        onClose={() => setShowAddModal(false)} 
-      />
-    </>
+    </View>
   );
 }
 
@@ -82,7 +73,7 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderRadius: 30,
     paddingHorizontal: 20,
     paddingVertical: 12,
@@ -91,7 +82,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
-    backdropFilter: 'blur(10px)',
     alignItems: 'center',
     justifyContent: 'space-around',
     minWidth: 320,

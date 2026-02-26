@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { supabase } from '../lib/supabase';
+import { toast } from '../lib/toast';
 
 export default function EditProfileScreen() {
   const router = useRouter();
@@ -20,6 +21,9 @@ export default function EditProfileScreen() {
   const [courseSearchQuery, setCourseSearchQuery] = useState('');
   const [courseSearchResults, setCourseSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
@@ -212,6 +216,41 @@ export default function EditProfileScreen() {
     }
   };
 
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText !== 'DELETE') {
+      toast.error('Please type DELETE to confirm');
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Delete user data (cascades will handle related data)
+      // The profile deletion will cascade to rounds, comments, likes, etc.
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .delete()
+        .eq('id', user.id);
+
+      if (profileError) {
+        console.error('Error deleting profile:', profileError);
+        throw profileError;
+      }
+
+      // Sign out the user (this effectively "deletes" the auth account from their perspective)
+      // Note: Full auth user deletion requires admin API or Edge Function
+      await supabase.auth.signOut();
+
+      toast.success('Account deleted');
+    } catch (error) {
+      console.error('Error deleting account:', error);
+      toast.error('Failed to delete account');
+      setDeleting(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -300,7 +339,7 @@ export default function EditProfileScreen() {
         {/* Home Course */}
         <View style={styles.field}>
           <Text style={styles.label}>Home Course</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.searchButton}
             onPress={() => setShowCourseSearch(true)}
           >
@@ -321,6 +360,21 @@ export default function EditProfileScreen() {
               )}
             </View>
           </TouchableOpacity>
+        </View>
+
+        {/* Danger Zone */}
+        <View style={styles.dangerZone}>
+          <Text style={styles.dangerZoneTitle}>Danger Zone</Text>
+          <TouchableOpacity
+            style={styles.deleteAccountButton}
+            onPress={() => setShowDeleteConfirm(true)}
+          >
+            <Ionicons name="trash-outline" size={20} color="#ef4444" />
+            <Text style={styles.deleteAccountButtonText}>Delete Account</Text>
+          </TouchableOpacity>
+          <Text style={styles.dangerZoneHint}>
+            This will permanently delete your account and all your data.
+          </Text>
         </View>
       </ScrollView>
 
@@ -388,6 +442,61 @@ export default function EditProfileScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Delete Account Confirmation Modal */}
+      <Modal
+        visible={showDeleteConfirm}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowDeleteConfirm(false)}
+      >
+        <View style={styles.deleteModalOverlay}>
+          <View style={styles.deleteModalContent}>
+            <View style={styles.deleteModalIcon}>
+              <Ionicons name="warning" size={48} color="#ef4444" />
+            </View>
+            <Text style={styles.deleteModalTitle}>Delete Account?</Text>
+            <Text style={styles.deleteModalText}>
+              This action cannot be undone. All your rounds, ratings, comments, and profile data will be permanently deleted.
+            </Text>
+
+            <Text style={styles.deleteModalLabel}>
+              Type <Text style={styles.deleteModalBold}>DELETE</Text> to confirm:
+            </Text>
+            <TextInput
+              style={styles.deleteModalInput}
+              placeholder="DELETE"
+              value={deleteConfirmText}
+              onChangeText={setDeleteConfirmText}
+              autoCapitalize="characters"
+            />
+
+            <View style={styles.deleteModalButtons}>
+              <TouchableOpacity
+                style={styles.deleteModalCancelButton}
+                onPress={() => {
+                  setShowDeleteConfirm(false);
+                  setDeleteConfirmText('');
+                }}
+              >
+                <Text style={styles.deleteModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.deleteModalConfirmButton,
+                  (deleteConfirmText !== 'DELETE' || deleting) && styles.deleteModalConfirmButtonDisabled,
+                ]}
+                onPress={handleDeleteAccount}
+                disabled={deleteConfirmText !== 'DELETE' || deleting}
+              >
+                <Text style={styles.deleteModalConfirmText}>
+                  {deleting ? 'Deleting...' : 'Delete Account'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
       </Modal>
     </KeyboardAvoidingView>
@@ -597,6 +706,130 @@ const styles = StyleSheet.create({
   courseResultLocation: {
     fontSize: 14,
     color: '#6b7280',
+    fontFamily: 'Inter',
+  },
+  // Danger Zone styles
+  dangerZone: {
+    marginTop: 20,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  dangerZoneTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ef4444',
+    marginBottom: 12,
+    fontFamily: 'Inter',
+  },
+  deleteAccountButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 16,
+    backgroundColor: '#fef2f2',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  deleteAccountButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#ef4444',
+    fontFamily: 'Inter',
+  },
+  dangerZoneHint: {
+    fontSize: 13,
+    color: '#9ca3af',
+    marginTop: 8,
+    fontFamily: 'Inter',
+  },
+  // Delete Modal styles
+  deleteModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  deleteModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+  },
+  deleteModalIcon: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  deleteModalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    textAlign: 'center',
+    marginBottom: 12,
+    fontFamily: 'Inter',
+  },
+  deleteModalText: {
+    fontSize: 15,
+    color: '#6b7280',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 20,
+    fontFamily: 'Inter',
+  },
+  deleteModalLabel: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 8,
+    fontFamily: 'Inter',
+  },
+  deleteModalBold: {
+    fontWeight: '700',
+    color: '#ef4444',
+  },
+  deleteModalInput: {
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    borderRadius: 10,
+    padding: 14,
+    fontSize: 16,
+    fontFamily: 'Inter',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  deleteModalButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  deleteModalCancelButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 10,
+    backgroundColor: '#f3f4f6',
+    alignItems: 'center',
+  },
+  deleteModalCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6b7280',
+    fontFamily: 'Inter',
+  },
+  deleteModalConfirmButton: {
+    flex: 1,
+    padding: 14,
+    borderRadius: 10,
+    backgroundColor: '#ef4444',
+    alignItems: 'center',
+  },
+  deleteModalConfirmButtonDisabled: {
+    opacity: 0.5,
+  },
+  deleteModalConfirmText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
     fontFamily: 'Inter',
   },
 });
