@@ -45,13 +45,37 @@ export default function RootLayout() {
     if (loading || !fontsLoaded) return;
 
     const inAuthGroup = segments[0] === 'auth';
+    const inOnboarding = segments[0] === 'onboarding';
 
     if (!session && !inAuthGroup) {
       router.replace('/auth/login');
     } else if (session && inAuthGroup) {
-      router.replace('/(tabs)');
+      // Check if user needs onboarding
+      checkOnboarding();
     }
   }, [session, segments, loading, fontsLoaded]);
+
+  const checkOnboarding = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('onboarding_completed')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.onboarding_completed) {
+        router.replace('/(tabs)');
+      } else {
+        router.replace('/onboarding');
+      }
+    } catch (error) {
+      // If profile doesn't exist or error, go to onboarding
+      router.replace('/onboarding');
+    }
+  };
 
   // Handle deep links
   useEffect(() => {
@@ -95,6 +119,7 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="auth/login" />
         <Stack.Screen name="auth/signup" />
+        <Stack.Screen name="onboarding" />
         <Stack.Screen name="(tabs)" />
       </Stack>
     </ToastProvider>
