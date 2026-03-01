@@ -10,6 +10,7 @@ export default function CourseDetailScreen() {
   const [course, setCourse] = useState<any>(null);
   const [rounds, setRounds] = useState<any[]>([]);
   const [relevantRounds, setRelevantRounds] = useState<any[]>([]);
+  const [userRound, setUserRound] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [currentUserId, setCurrentUserId] = useState('');
@@ -62,6 +63,10 @@ const loadCourseDetails = async () => {
 
     setRounds(roundsData || []);
       console.log('Rounds data:', roundsData);
+
+      // Find current user's round for this course (most recent)
+      const myRound = roundsData?.find(r => r.user_id === user.id);
+      setUserRound(myRound || null);
 
       // Get users I follow
 
@@ -158,6 +163,38 @@ const loadCourseDetails = async () => {
     router.push({
       pathname: '/course/reviews',
       params: { id, name: course?.name },
+    });
+  };
+
+  const handleEditRound = () => {
+    if (!userRound || !course) return;
+
+    // Parse photos
+    let photos: string[] = [];
+    if (userRound.photos) {
+      try {
+        photos = typeof userRound.photos === 'string' ? JSON.parse(userRound.photos) : userRound.photos;
+      } catch {
+        photos = [];
+      }
+    }
+
+    // Navigate to edit round flow with existing data
+    router.push({
+      pathname: '/edit-round/score',
+      params: {
+        roundId: userRound.id,
+        courseId: course.id,
+        courseName: course.name,
+        courseLocation: course.location,
+        score: userRound.score?.toString() || '',
+        holes: userRound.holes || '18',
+        notes: userRound.notes || '',
+        rating: userRound.rating?.toString() || '7.5',
+        photos: JSON.stringify(photos),
+        partners: userRound.partners || '',
+        datePlayed: userRound.date_played || '',
+      },
     });
   };
 
@@ -260,6 +297,39 @@ const loadCourseDetails = async () => {
               </TouchableOpacity>
             )}
           </View>
+        )}
+
+        {/* Your Rating */}
+        {userRound && (
+          <TouchableOpacity style={styles.yourRatingSection} onPress={handleEditRound}>
+            <View style={styles.yourRatingHeader}>
+              <Text style={styles.sectionTitle}>Your Rating</Text>
+              <View style={styles.editBadge}>
+                <Ionicons name="create-outline" size={16} color="#16a34a" />
+                <Text style={styles.editBadgeText}>Edit</Text>
+              </View>
+            </View>
+            <View style={styles.yourRatingCard}>
+              <View style={styles.yourRatingLeft}>
+                <View style={styles.yourRatingBox}>
+                  <Ionicons name="golf" size={24} color="#16a34a" />
+                  <Text style={styles.yourRatingNumber}>{userRound.rating.toFixed(1)}</Text>
+                </View>
+              </View>
+              <View style={styles.yourRatingInfo}>
+                {userRound.score && (
+                  <Text style={styles.yourRatingScore}>
+                    Shot {userRound.score} • {userRound.holes === 'front9' ? 'Front 9' : userRound.holes === 'back9' ? 'Back 9' : '18 holes'}
+                  </Text>
+                )}
+                <Text style={styles.yourRatingDate}>{formatDate(userRound.date_played)}</Text>
+                {userRound.notes && (
+                  <Text style={styles.yourRatingNotes} numberOfLines={2}>"{userRound.notes}"</Text>
+                )}
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#9ca3af" />
+            </View>
+          </TouchableOpacity>
         )}
 
         {/* Reviews */}
@@ -452,6 +522,83 @@ const styles = StyleSheet.create({
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
+  },
+  yourRatingSection: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    backgroundColor: '#f0fdf4',
+  },
+  yourRatingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  editBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#fff',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#16a34a',
+  },
+  editBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#16a34a',
+    fontFamily: 'Inter',
+  },
+  yourRatingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#86efac',
+  },
+  yourRatingLeft: {
+    marginRight: 16,
+  },
+  yourRatingBox: {
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+  },
+  yourRatingNumber: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#16a34a',
+    fontFamily: 'Inter',
+    marginTop: 4,
+  },
+  yourRatingInfo: {
+    flex: 1,
+  },
+  yourRatingScore: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    fontFamily: 'Inter',
+    marginBottom: 4,
+  },
+  yourRatingDate: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontFamily: 'Inter',
+    marginBottom: 4,
+  },
+  yourRatingNotes: {
+    fontSize: 14,
+    color: '#4b5563',
+    fontStyle: 'italic',
+    fontFamily: 'Inter',
   },
   sectionTitle: {
     fontSize: 18,

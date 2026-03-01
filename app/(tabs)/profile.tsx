@@ -635,10 +635,14 @@ export default function ProfileScreen() {
                   <Text style={styles.roundRankNumber}>#{index + 1}</Text>
                 </View>
 
-                <View style={styles.roundInfo}>
+                <TouchableOpacity
+                  style={styles.roundInfo}
+                  onPress={() => router.push(`/course/${round.courses.id}`)}
+                  disabled={isEditMode}
+                >
                   <Text style={styles.roundCourseName}>{round.courses.name}</Text>
                   <Text style={styles.roundLocation}>{round.courses.location}</Text>
-                </View>
+                </TouchableOpacity>
 
                 {!isEditMode ? (
                   <View style={styles.roundRating}>

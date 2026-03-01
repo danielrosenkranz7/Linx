@@ -99,6 +99,21 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
     return [];
   })();
 
+  // Parse partners - could be a string of names
+  const getPartnerInitials = (): string[] => {
+    if (!round.partners) return [];
+    const names = round.partners.split(',').map((n: string) => n.trim()).filter(Boolean);
+    return names.map((name: string) => {
+      const parts = name.split(' ').filter(Boolean);
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+      }
+      return name[0]?.toUpperCase() || '?';
+    }).slice(0, 3); // Max 3 partners shown
+  };
+
+  const partnerInitials = getPartnerInitials();
+
   // Sync with parent prop when it changes
   useEffect(() => {
     setIsLiked(initialIsLiked);
@@ -347,12 +362,18 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
     }
   };
 
+  const getHolesText = () => {
+    if (round.holes === 'front9') return 'Front 9';
+    if (round.holes === 'back9') return 'Back 9';
+    return '18 holes';
+  };
+
   return (
     <View style={styles.card}>
-      {/* User Info */}
+      {/* Header Row: Avatar, Name, Partners, Timestamp */}
       <View style={styles.header}>
         <TouchableOpacity
-          style={styles.userInfo}
+          style={styles.userSection}
           onPress={() => router.push(`/user/${round.user.id}`)}
         >
           {round.user.avatar_url ? (
@@ -362,20 +383,20 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
               <Text style={styles.avatarText}>{round.user.name?.[0] || '?'}</Text>
             </View>
           )}
-          <View style={styles.userDetails}>
-            <Text style={styles.userName}>{round.user.name}</Text>
-            <View style={styles.actionRow}>
-              <Text style={styles.actionText}>ranked </Text>
-              <TouchableOpacity onPress={() => router.push(`/course/${round.course.id}`)}>
-                <Text style={styles.courseName}>{round.course.name}</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.location}>
-              <Ionicons name="location-outline" size={12} color="#6b7280" />
-              {' '}{round.course.location}
-            </Text>
-          </View>
+          <Text style={styles.userName}>{round.user.name}</Text>
         </TouchableOpacity>
+
+        {/* Partner Initials */}
+        {partnerInitials.length > 0 && (
+          <View style={styles.partnersContainer}>
+            {partnerInitials.map((initial, index) => (
+              <View key={index} style={styles.partnerCircle}>
+                <Text style={styles.partnerInitial}>{initial}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         <View style={styles.headerRight}>
           <Text style={styles.timestamp}>{formatDate(round.created_at)}</Text>
           <TouchableOpacity onPress={handleMoreOptions} style={styles.moreButton}>
@@ -384,74 +405,98 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
         </View>
       </View>
 
-      {/* Content Row: Info on left, Photos on right */}
-      <View style={styles.contentRow}>
-        <View style={styles.contentLeft}>
-          {/* Rating */}
-          <View style={styles.ratingContainer}>
-            <View style={styles.rating}>
-              <Ionicons name="golf" size={24} color="#16a34a" />
-              <Text style={styles.ratingNumber}>{round.rating.toFixed(1)}</Text>
-            </View>
-          </View>
+      {/* Course Info */}
+      <TouchableOpacity
+        style={styles.courseSection}
+        onPress={() => router.push(`/course/${round.course.id}`)}
+      >
+        <Text style={styles.courseName}>{round.course.name}</Text>
+        <Text style={styles.courseLocation}>
+          <Ionicons name="location" size={13} color="#6b7280" />
+          {' '}{round.course.location}
+        </Text>
+      </TouchableOpacity>
 
-          {/* Score Info */}
-          {round.score && (
-            <Text style={styles.scoreText}>
-              Shot {[8, 11, 18].includes(round.score) || (round.score >= 80 && round.score <= 89) ? 'an' : 'a'} {round.score} •{' '}
-              {round.holes === 'front9' ? 'Front 9' : round.holes === 'back9' ? 'Back 9' : '18 holes'}
-            </Text>
-          )}
-
-          {/* Notes */}
-          {round.notes && (
-            <Text style={styles.notes} numberOfLines={3}>
-              {round.notes}
-            </Text>
-          )}
+      {/* Scorecard Box */}
+      <View style={styles.scorecardContainer}>
+        {/* Left: Rating Box */}
+        <View style={styles.ratingBox}>
+          <Ionicons name="golf" size={28} color="#16a34a" />
+          <Text style={styles.ratingNumber}>{round.rating.toFixed(1)}</Text>
         </View>
 
-        {/* Photo Previews */}
-        {photos.length > 0 && (
-          <TouchableOpacity
-            style={styles.photoPreviewContainer}
-            onPress={() => {
-              setSelectedPhotoIndex(0);
-              setShowPhotoModal(true);
-            }}
-          >
-            <Image source={{ uri: photos[0] }} style={styles.photoPreview} />
-            {photos.length > 1 && (
-              <View style={styles.photoCount}>
-                <Ionicons name="images" size={12} color="#fff" />
-                <Text style={styles.photoCountText}>{photos.length}</Text>
-              </View>
+        {/* Right: Photos + Score */}
+        <View style={styles.rightBox}>
+          {/* Photo Grid */}
+          {photos.length > 0 ? (
+            <TouchableOpacity
+              style={styles.photoGrid}
+              onPress={() => {
+                setSelectedPhotoIndex(0);
+                setShowPhotoModal(true);
+              }}
+            >
+              {photos.slice(0, 6).map((photo, index) => (
+                <View key={index} style={styles.photoCell}>
+                  <Image source={{ uri: photo }} style={styles.photoThumb} />
+                  {index === 5 && photos.length > 6 && (
+                    <View style={styles.photoOverlay}>
+                      <Text style={styles.photoOverlayText}>+{photos.length - 6}</Text>
+                    </View>
+                  )}
+                </View>
+              ))}
+              {/* Fill empty cells if less than 6 photos */}
+              {photos.length < 6 && Array(6 - photos.length).fill(0).map((_, index) => (
+                <View key={`empty-${index}`} style={styles.photoCellEmpty} />
+              ))}
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.noPhotosContainer}>
+              <Ionicons name="camera-outline" size={24} color="#d1d5db" />
+            </View>
+          )}
+
+          {/* Score Info */}
+          <View style={styles.scoreInfo}>
+            {round.score ? (
+              <Text style={styles.scoreText}>Shot {round.score}</Text>
+            ) : (
+              <Text style={styles.scoreTextEmpty}>No score</Text>
             )}
-          </TouchableOpacity>
-        )}
+            <Text style={styles.holesText}>{getHolesText()}</Text>
+          </View>
+        </View>
       </View>
+
+      {/* Notes */}
+      {round.notes && (
+        <Text style={styles.notes} numberOfLines={3}>
+          "{round.notes}"
+        </Text>
+      )}
 
       {/* Action Buttons */}
       <View style={styles.actions}>
         <TouchableOpacity style={styles.actionButton} onPress={handleLike}>
           <Ionicons
             name={isLiked ? 'heart' : 'heart-outline'}
-            size={20}
+            size={22}
             color={isLiked ? '#16a34a' : '#6b7280'}
           />
           <Text style={[styles.actionCount, isLiked && styles.likedCount]}>{likesCount}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionButton} onPress={handleOpenComments}>
-          <Ionicons name="chatbubble-outline" size={20} color="#6b7280" />
+          <Ionicons name="chatbubble-outline" size={22} color="#6b7280" />
           <Text style={styles.actionCount}>{commentsCount}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionButton} onPress={handleShare}>
-          <Ionicons name="paper-plane-outline" size={20} color="#6b7280" />
+          <Ionicons name="paper-plane-outline" size={22} color="#6b7280" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.actionButton} onPress={handleBookmark}>
           <Ionicons
             name={isBookmarked ? 'bookmark' : 'bookmark-outline'}
-            size={20}
+            size={22}
             color={isBookmarked ? '#16a34a' : '#6b7280'}
           />
         </TouchableOpacity>
@@ -753,108 +798,68 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
 
 const styles = StyleSheet.create({
   card: {
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-    padding: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 8,
+    borderBottomColor: '#f3f4f6',
+    paddingTop: 16,
+    paddingBottom: 12,
   },
+  // Header
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    paddingHorizontal: 16,
     marginBottom: 12,
   },
-  contentRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  contentLeft: {
-    flex: 1,
-    marginRight: 12,
-  },
-  photoPreviewContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 8,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  photoPreview: {
-    width: '100%',
-    height: '100%',
-  },
-  photoCount: {
-    position: 'absolute',
-    bottom: 4,
-    right: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+  userSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-  },
-  photoCountText: {
-    color: '#fff',
-    fontSize: 11,
-    fontWeight: '600',
-    fontFamily: 'Inter',
-  },
-  userInfo: {
-    flexDirection: 'row',
     flex: 1,
   },
   avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    marginRight: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
   },
   avatarPlaceholder: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#16a34a',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: 10,
   },
   avatarText: {
     color: '#fff',
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '700',
     fontFamily: 'Inter',
   },
-  userDetails: {
-    flex: 1,
-  },
   userName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
     color: '#1a1a1a',
     fontFamily: 'Inter',
   },
-  actionRow: {
+  partnersContainer: {
     flexDirection: 'row',
+    marginRight: 12,
+    gap: 4,
+  },
+  partnerCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#e5e7eb',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    marginTop: 2,
+    justifyContent: 'center',
   },
-  actionText: {
-    fontSize: 14,
+  partnerInitial: {
+    fontSize: 11,
+    fontWeight: '700',
     color: '#6b7280',
-    fontFamily: 'Inter',
-  },
-  courseName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#16a34a',
-    fontFamily: 'Inter',
-  },
-  location: {
-    fontSize: 13,
-    color: '#6b7280',
-    marginTop: 4,
     fontFamily: 'Inter',
   },
   headerRight: {
@@ -870,36 +875,141 @@ const styles = StyleSheet.create({
   moreButton: {
     padding: 4,
   },
-  ratingContainer: {
+  // Course Section
+  courseSection: {
+    paddingHorizontal: 16,
     marginBottom: 12,
   },
-  rating: {
+  courseName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    fontFamily: 'Inter',
+    marginBottom: 4,
+  },
+  courseLocation: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontFamily: 'Inter',
+  },
+  // Scorecard Container
+  scorecardContainer: {
     flexDirection: 'row',
+    marginHorizontal: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+    overflow: 'hidden',
+    backgroundColor: '#fafafa',
+  },
+  // Rating Box (Left)
+  ratingBox: {
+    width: 100,
+    paddingVertical: 20,
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    backgroundColor: '#f0fdf4',
+    borderRightWidth: 1,
+    borderRightColor: '#e5e7eb',
   },
   ratingNumber: {
-    fontSize: 28,
+    fontSize: 32,
     fontWeight: '700',
     color: '#16a34a',
     fontFamily: 'Inter',
+    marginTop: 4,
+  },
+  // Right Box (Photos + Score)
+  rightBox: {
+    flex: 1,
+    padding: 8,
+  },
+  // Photo Grid
+  photoGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginBottom: 8,
+  },
+  photoCell: {
+    width: '32%',
+    aspectRatio: 1,
+    borderRadius: 6,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  photoCellEmpty: {
+    width: '32%',
+    aspectRatio: 1,
+    borderRadius: 6,
+    backgroundColor: '#f3f4f6',
+  },
+  photoThumb: {
+    width: '100%',
+    height: '100%',
+  },
+  photoOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  photoOverlayText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '700',
+    fontFamily: 'Inter',
+  },
+  noPhotosContainer: {
+    height: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  // Score Info
+  scoreInfo: {
+    paddingTop: 4,
   },
   scoreText: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginBottom: 8,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1a1a1a',
     fontFamily: 'Inter',
   },
+  scoreTextEmpty: {
+    fontSize: 15,
+    color: '#9ca3af',
+    fontFamily: 'Inter',
+  },
+  holesText: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontFamily: 'Inter',
+    marginTop: 2,
+  },
+  // Notes
   notes: {
     fontSize: 15,
-    color: '#1a1a1a',
+    color: '#4b5563',
     lineHeight: 22,
-    marginBottom: 12,
+    fontStyle: 'italic',
+    paddingHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
     fontFamily: 'Inter',
   },
+  // Actions
   actions: {
     flexDirection: 'row',
-    gap: 20,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    gap: 24,
   },
   actionButton: {
     flexDirection: 'row',
