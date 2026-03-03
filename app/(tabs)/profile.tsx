@@ -7,7 +7,9 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   Share,
   StyleSheet,
@@ -687,35 +689,40 @@ export default function ProfileScreen() {
       <Modal
         visible={showFindFriends}
         animationType="slide"
-        transparent
         onRequestClose={closeFindFriends}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            {/* Modal Header */}
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Find Friends</Text>
-              <TouchableOpacity onPress={closeFindFriends} style={styles.modalClose}>
-                <Ionicons name="close" size={28} color="#1a1a1a" />
-              </TouchableOpacity>
-            </View>
+        <KeyboardAvoidingView
+          style={styles.modalContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          {/* Modal Header */}
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Find Friends</Text>
+            <TouchableOpacity onPress={closeFindFriends} style={styles.modalClose}>
+              <Ionicons name="close" size={28} color="#1a1a1a" />
+            </TouchableOpacity>
+          </View>
 
-            {/* Search Bar */}
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color="#9ca3af" style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search for golfers..."
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                autoFocus
-                placeholderTextColor="#9ca3af"
-              />
-              {isSearching && <ActivityIndicator size="small" color="#16a34a" />}
-            </View>
+          {/* Search Bar */}
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={20} color="#9ca3af" style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search for golfers..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoFocus
+              placeholderTextColor="#9ca3af"
+            />
+            {isSearching && <ActivityIndicator size="small" color="#16a34a" />}
+          </View>
 
-            {/* Search Results */}
-            <ScrollView style={styles.searchResults} showsVerticalScrollIndicator={false}>
+          {/* Search Results */}
+          <ScrollView
+            style={styles.searchResults}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
               {searchQuery === '' && (
                 <View style={styles.searchEmptyState}>
                   <Ionicons name="people-outline" size={48} color="#d1d5db" />
@@ -775,9 +782,8 @@ export default function ProfileScreen() {
                   </TouchableOpacity>
                 );
               })}
-            </ScrollView>
-          </View>
-        </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -1241,17 +1247,10 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   // Find Friends Modal styles
-  modalOverlay: {
+  modalContainer: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
     backgroundColor: '#fff',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    height: '75%',
-    paddingBottom: 40,
+    paddingTop: 60,
   },
   modalHeader: {
     flexDirection: 'row',
