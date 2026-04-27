@@ -18,10 +18,24 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { getRatingColor } from '../lib/colors';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+
+type Partner = {
+  name: string;
+  user_id?: string;
+  initials: string;
+};
+
+type PartnerProfile = {
+  id: string;
+  name: string;
+  username?: string;
+  avatar_url?: string;
+} | null;
 
 type FeedCardProps = {
   round: any;
@@ -48,6 +62,11 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
   const [reportReason, setReportReason] = useState('');
   const [reportDetails, setReportDetails] = useState('');
   const [submittingReport, setSubmittingReport] = useState(false);
+  const [showPartnerPreview, setShowPartnerPreview] = useState(false);
+  const [selectedPartner, setSelectedPartner] = useState<Partner | null>(null);
+  const [partnerProfile, setPartnerProfile] = useState<PartnerProfile>(null);
+  const [loadingPartnerProfile, setLoadingPartnerProfile] = useState(false);
+  const [commentLikes, setCommentLikes] = useState<Record<string, boolean>>({});
   const scrollViewRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
   const [keyboardHeight] = useState(new Animated.Value(0));
@@ -99,20 +118,85 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
     return [];
   })();
 
-  // Parse partners - could be a string of names
-  const getPartnerInitials = (): string[] => {
+  // Parse partners - could be JSON array or legacy comma-separated string
+  const getPartners = (): Partner[] => {
     if (!round.partners) return [];
-    const names = round.partners.split(',').map((n: string) => n.trim()).filter(Boolean);
-    return names.map((name: string) => {
-      const parts = name.split(' ').filter(Boolean);
-      if (parts.length >= 2) {
-        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+
+    let partnersArray: Array<{ name: string; user_id?: string }> = [];
+
+    // Try parsing as JSON first (new format)
+    if (typeof round.partners === 'string') {
+      try {
+        const parsed = JSON.parse(round.partners);
+        if (Array.isArray(parsed)) {
+          partnersArray = parsed;
+        }
+      } catch {
+        // Legacy format: comma-separated names
+        const names = round.partners.split(',').map((n: string) => n.trim()).filter(Boolean);
+        partnersArray = names.map((name: string) => ({ name }));
       }
-      return name[0]?.toUpperCase() || '?';
-    }).slice(0, 3); // Max 3 partners shown
+    } else if (Array.isArray(round.partners)) {
+      partnersArray = round.partners;
+    }
+
+    // Generate initials and sort: Linx users first, then alphabetically
+    const partners: Partner[] = partnersArray.map(p => {
+      const parts = p.name.split(' ').filter(Boolean);
+      const initials = parts.length >= 2
+        ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+        : p.name[0]?.toUpperCase() || '?';
+
+      return {
+        name: p.name,
+        user_id: p.user_id,
+        initials,
+      };
+    });
+
+    // Sort: Linx users (with user_id) first, then alphabetically by name
+    partners.sort((a, b) => {
+      if (a.user_id && !b.user_id) return -1;
+      if (!a.user_id && b.user_id) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    return partners.slice(0, 3); // Max 3 partners shown
   };
 
-  const partnerInitials = getPartnerInitials();
+  const partners = getPartners();
+
+  const handlePartnerPress = async (partner: Partner) => {
+    setSelectedPartner(partner);
+    setShowPartnerPreview(true);
+
+    if (partner.user_id) {
+      setLoadingPartnerProfile(true);
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, name, username, avatar_url')
+          .eq('id', partner.user_id)
+          .single();
+
+        setPartnerProfile(data);
+      } catch {
+        setPartnerProfile(null);
+      } finally {
+        setLoadingPartnerProfile(false);
+      }
+    } else {
+      setPartnerProfile(null);
+      setLoadingPartnerProfile(false);
+    }
+  };
+
+  const handleViewPartnerProfile = () => {
+    if (partnerProfile?.id) {
+      setShowPartnerPreview(false);
+      router.push(`/user/${partnerProfile.id}`);
+    }
+  };
 
   // Sync with parent prop when it changes
   useEffect(() => {
@@ -150,9 +234,8 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
 
         if (error) throw error;
       }
-    } catch (error) {
+    } catch {
       // Revert on error
-      console.error('Error toggling like:', error);
       setIsLiked(wasLiked);
       setLikesCount((prev: number) => wasLiked ? prev + 1 : Math.max(0, prev - 1));
     }
@@ -184,9 +267,8 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
 
         if (error) throw error;
       }
-    } catch (error) {
+    } catch {
       // Revert on error
-      console.error('Error toggling bookmark:', error);
       setIsBookmarked(wasBookmarked);
     }
   };
@@ -194,18 +276,66 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
   const loadComments = async () => {
     setLoadingComments(true);
     try {
-      const { data } = await supabase
+      // Fetch comments with user info
+      const { data: commentsData } = await supabase
         .from('comments')
         .select(`
           *,
           user:profiles!comments_user_id_fkey(id, name, username, avatar_url)
         `)
-        .eq('round_id', round.id)
-        .order('created_at', { ascending: true });
+        .eq('round_id', round.id);
 
-      setComments(data || []);
-    } catch (error) {
-      console.error('Error loading comments:', error);
+      if (!commentsData || commentsData.length === 0) {
+        setComments([]);
+        setCommentLikes({});
+        setLoadingComments(false);
+        return;
+      }
+
+      const commentIds = commentsData.map(c => c.id);
+
+      // Fetch likes count for each comment
+      const { data: likesData } = await supabase
+        .from('comment_likes')
+        .select('comment_id')
+        .in('comment_id', commentIds);
+
+      // Count likes per comment
+      const likesCount: Record<string, number> = {};
+      (likesData || []).forEach(like => {
+        likesCount[like.comment_id] = (likesCount[like.comment_id] || 0) + 1;
+      });
+
+      // Check which comments current user has liked
+      const { data: userLikes } = await supabase
+        .from('comment_likes')
+        .select('comment_id')
+        .eq('user_id', currentUserId)
+        .in('comment_id', commentIds);
+
+      const userLikedComments: Record<string, boolean> = {};
+      (userLikes || []).forEach(like => {
+        userLikedComments[like.comment_id] = true;
+      });
+      setCommentLikes(userLikedComments);
+
+      // Add likes_count to comments and sort by relevance
+      const commentsWithLikes = commentsData.map(comment => ({
+        ...comment,
+        likes_count: likesCount[comment.id] || 0,
+      }));
+
+      // Sort: most liked first, then most recent
+      commentsWithLikes.sort((a, b) => {
+        if (b.likes_count !== a.likes_count) {
+          return b.likes_count - a.likes_count;
+        }
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+
+      setComments(commentsWithLikes);
+    } catch {
+      toast.error('Failed to load comments');
     } finally {
       setLoadingComments(false);
     }
@@ -236,11 +366,13 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
 
       if (error) throw error;
 
-      setComments((prev) => [...prev, data]);
+      // Add likes_count to new comment
+      const newCommentWithLikes = { ...data, likes_count: 0 };
+      setComments((prev) => [...prev, newCommentWithLikes]);
       setCommentsCount((prev: number) => prev + 1);
       setNewComment('');
-    } catch (error) {
-      console.error('Error submitting comment:', error);
+    } catch {
+      toast.error('Failed to post comment');
     } finally {
       setSubmittingComment(false);
     }
@@ -252,8 +384,44 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
 
       setComments((prev) => prev.filter((c) => c.id !== commentId));
       setCommentsCount((prev: number) => Math.max(0, prev - 1));
-    } catch (error) {
-      console.error('Error deleting comment:', error);
+    } catch {
+      toast.error('Failed to delete comment');
+    }
+  };
+
+  const handleCommentLike = async (commentId: string) => {
+    if (!currentUserId) return;
+
+    const isLiked = commentLikes[commentId];
+
+    // Optimistic update
+    setCommentLikes(prev => ({ ...prev, [commentId]: !isLiked }));
+    setComments(prev => prev.map(c =>
+      c.id === commentId
+        ? { ...c, likes_count: isLiked ? Math.max(0, c.likes_count - 1) : c.likes_count + 1 }
+        : c
+    ));
+
+    try {
+      if (isLiked) {
+        await supabase
+          .from('comment_likes')
+          .delete()
+          .eq('comment_id', commentId)
+          .eq('user_id', currentUserId);
+      } else {
+        await supabase
+          .from('comment_likes')
+          .insert({ comment_id: commentId, user_id: currentUserId });
+      }
+    } catch {
+      // Revert on error
+      setCommentLikes(prev => ({ ...prev, [commentId]: isLiked }));
+      setComments(prev => prev.map(c =>
+        c.id === commentId
+          ? { ...c, likes_count: isLiked ? c.likes_count + 1 : Math.max(0, c.likes_count - 1) }
+          : c
+      ));
     }
   };
 
@@ -341,8 +509,7 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
       setShowReportModal(false);
       setReportReason('');
       setReportDetails('');
-    } catch (error) {
-      console.error('Error submitting report:', error);
+    } catch {
       toast.error('Failed to submit report');
     } finally {
       setSubmittingReport(false);
@@ -357,8 +524,8 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
       await Share.share({
         message: `Check out ${userName}'s round at ${courseName} on Linx! linx://round/${round.id}`,
       });
-    } catch (error) {
-      console.error('Error sharing:', error);
+    } catch {
+      // Share cancelled or failed - no action needed
     }
   };
 
@@ -387,12 +554,24 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
         </TouchableOpacity>
 
         {/* Partner Initials */}
-        {partnerInitials.length > 0 && (
+        {partners.length > 0 && (
           <View style={styles.partnersContainer}>
-            {partnerInitials.map((initial, index) => (
-              <View key={index} style={styles.partnerCircle}>
-                <Text style={styles.partnerInitial}>{initial}</Text>
-              </View>
+            {partners.map((partner, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.partnerCircle,
+                  partner.user_id && styles.partnerCircleLinx,
+                ]}
+                onPress={() => handlePartnerPress(partner)}
+              >
+                <Text style={[
+                  styles.partnerInitial,
+                  partner.user_id && styles.partnerInitialLinx,
+                ]}>
+                  {partner.initials}
+                </Text>
+              </TouchableOpacity>
             ))}
           </View>
         )}
@@ -420,15 +599,21 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
       {/* Scorecard Box */}
       <View style={styles.scorecardContainer}>
         {/* Left: Rating Box */}
-        <View style={styles.ratingBox}>
-          <Ionicons name="golf" size={28} color="#16a34a" />
+        <View style={[
+          styles.ratingBox,
+          {
+            backgroundColor: getRatingColor(round.rating).background,
+            borderColor: getRatingColor(round.rating).border,
+          }
+        ]}>
+          <Ionicons name="golf" size={20} color="#4b5563" />
           <Text style={styles.ratingNumber}>{round.rating.toFixed(1)}</Text>
         </View>
 
         {/* Right: Photos + Score */}
         <View style={styles.rightBox}>
-          {/* Photo Grid */}
-          {photos.length > 0 ? (
+          {/* Photo Grid - only show if there are photos */}
+          {photos.length > 0 && (
             <TouchableOpacity
               style={styles.photoGrid}
               onPress={() => {
@@ -437,7 +622,7 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
               }}
             >
               {photos.slice(0, 6).map((photo, index) => (
-                <View key={index} style={styles.photoCell}>
+                <View key={index} style={[styles.photoCell, photos.length <= 3 && styles.photoCellLarge]}>
                   <Image source={{ uri: photo }} style={styles.photoThumb} />
                   {index === 5 && photos.length > 6 && (
                     <View style={styles.photoOverlay}>
@@ -446,15 +631,7 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
                   )}
                 </View>
               ))}
-              {/* Fill empty cells if less than 6 photos */}
-              {photos.length < 6 && Array(6 - photos.length).fill(0).map((_, index) => (
-                <View key={`empty-${index}`} style={styles.photoCellEmpty} />
-              ))}
             </TouchableOpacity>
-          ) : (
-            <View style={styles.noPhotosContainer}>
-              <Ionicons name="camera-outline" size={24} color="#d1d5db" />
-            </View>
           )}
 
           {/* Score Info */}
@@ -599,6 +776,25 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
                     </View>
                     <View style={styles.commentMeta}>
                       <Text style={styles.commentTime}>{formatCommentDate(comment.created_at)}</Text>
+                      <TouchableOpacity
+                        style={styles.commentLikeButton}
+                        onPress={() => handleCommentLike(comment.id)}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Ionicons
+                          name={commentLikes[comment.id] ? 'heart' : 'heart-outline'}
+                          size={14}
+                          color={commentLikes[comment.id] ? '#ef4444' : '#9ca3af'}
+                        />
+                        {comment.likes_count > 0 && (
+                          <Text style={[
+                            styles.commentLikeCount,
+                            commentLikes[comment.id] && styles.commentLikeCountActive
+                          ]}>
+                            {comment.likes_count}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
                       {comment.user_id === currentUserId && (
                         <TouchableOpacity
                           onPress={() => handleDeleteComment(comment.id)}
@@ -792,6 +988,65 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
           </View>
         </View>
       </Modal>
+
+      {/* Partner Preview Modal */}
+      <Modal
+        visible={showPartnerPreview}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowPartnerPreview(false)}
+      >
+        <TouchableOpacity
+          style={styles.partnerPreviewOverlay}
+          activeOpacity={1}
+          onPress={() => setShowPartnerPreview(false)}
+        >
+          <View style={styles.partnerPreviewContent}>
+            {loadingPartnerProfile ? (
+              <View style={styles.partnerPreviewLoading}>
+                <Text style={styles.partnerPreviewLoadingText}>Loading...</Text>
+              </View>
+            ) : partnerProfile ? (
+              <TouchableOpacity
+                style={styles.partnerPreviewCard}
+                onPress={handleViewPartnerProfile}
+                activeOpacity={0.9}
+              >
+                {partnerProfile.avatar_url ? (
+                  <Image
+                    source={{ uri: partnerProfile.avatar_url }}
+                    style={styles.partnerPreviewAvatar}
+                  />
+                ) : (
+                  <View style={styles.partnerPreviewAvatarPlaceholder}>
+                    <Text style={styles.partnerPreviewAvatarText}>
+                      {partnerProfile.name?.[0]?.toUpperCase() || '?'}
+                    </Text>
+                  </View>
+                )}
+                <Text style={styles.partnerPreviewName}>{partnerProfile.name}</Text>
+                {partnerProfile.username && (
+                  <Text style={styles.partnerPreviewUsername}>@{partnerProfile.username}</Text>
+                )}
+                <View style={styles.partnerPreviewAction}>
+                  <Text style={styles.partnerPreviewActionText}>View Profile</Text>
+                  <Ionicons name="chevron-forward" size={16} color="#16a34a" />
+                </View>
+              </TouchableOpacity>
+            ) : selectedPartner ? (
+              <View style={styles.partnerPreviewCard}>
+                <View style={styles.partnerPreviewAvatarPlaceholder}>
+                  <Text style={styles.partnerPreviewAvatarText}>
+                    {selectedPartner.initials}
+                  </Text>
+                </View>
+                <Text style={styles.partnerPreviewName}>{selectedPartner.name}</Text>
+                <Text style={styles.partnerPreviewNotOnLinx}>Not on Linx</Text>
+              </View>
+            ) : null}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -799,10 +1054,11 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#fff',
-    borderBottomWidth: 8,
-    borderBottomColor: '#f3f4f6',
+    marginBottom: 12,
     paddingTop: 16,
-    paddingBottom: 12,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
   },
   // Header
   header: {
@@ -846,21 +1102,30 @@ const styles = StyleSheet.create({
   partnersContainer: {
     flexDirection: 'row',
     marginRight: 12,
-    gap: 4,
+    gap: 6,
   },
   partnerCircle: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: '#f3f4f6',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  partnerCircleLinx: {
+    backgroundColor: '#f0fdf4',
+    borderColor: '#86efac',
   },
   partnerInitial: {
     fontSize: 11,
     fontWeight: '700',
     color: '#6b7280',
     fontFamily: 'Inter',
+  },
+  partnerInitialLinx: {
+    color: '#16a34a',
   },
   headerRight: {
     flexDirection: 'row',
@@ -904,20 +1169,20 @@ const styles = StyleSheet.create({
   },
   // Rating Box (Left)
   ratingBox: {
-    width: 100,
-    paddingVertical: 20,
+    width: 80,
+    paddingVertical: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f0fdf4',
     borderRightWidth: 1,
     borderRightColor: '#e5e7eb',
+    borderWidth: 1,
   },
   ratingNumber: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: '700',
-    color: '#16a34a',
+    color: '#4b5563',
     fontFamily: 'Inter',
-    marginTop: 4,
+    marginTop: 2,
   },
   // Right Box (Photos + Score)
   rightBox: {
@@ -938,11 +1203,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
-  photoCellEmpty: {
-    width: '32%',
-    aspectRatio: 1,
-    borderRadius: 6,
-    backgroundColor: '#f3f4f6',
+  photoCellLarge: {
+    width: '48%',
+    aspectRatio: 1.2,
   },
   photoThumb: {
     width: '100%',
@@ -963,14 +1226,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     fontFamily: 'Inter',
-  },
-  noPhotosContainer: {
-    height: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#f9fafb',
-    borderRadius: 8,
-    marginBottom: 8,
   },
   // Score Info
   scoreInfo: {
@@ -1134,7 +1389,7 @@ const styles = StyleSheet.create({
   },
   commentBubble: {
     backgroundColor: '#f3f4f6',
-    borderRadius: 16,
+    borderRadius: 12,
     borderTopLeftRadius: 4,
     paddingHorizontal: 14,
     paddingVertical: 10,
@@ -1169,6 +1424,19 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontFamily: 'Inter',
     fontWeight: '500',
+  },
+  commentLikeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  commentLikeCount: {
+    fontSize: 12,
+    color: '#9ca3af',
+    fontFamily: 'Inter',
+  },
+  commentLikeCountActive: {
+    color: '#ef4444',
   },
   commentInputContainer: {
     paddingHorizontal: 16,
@@ -1347,6 +1615,96 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '600',
     color: '#fff',
+    fontFamily: 'Inter',
+  },
+  // Partner Preview Modal styles
+  partnerPreviewOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  partnerPreviewContent: {
+    width: '100%',
+    maxWidth: 280,
+  },
+  partnerPreviewCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  partnerPreviewLoading: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+  },
+  partnerPreviewLoadingText: {
+    fontSize: 15,
+    color: '#6b7280',
+    fontFamily: 'Inter',
+  },
+  partnerPreviewAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    marginBottom: 16,
+  },
+  partnerPreviewAvatarPlaceholder: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: '#16a34a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  partnerPreviewAvatarText: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#fff',
+    fontFamily: 'Inter',
+  },
+  partnerPreviewName: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    fontFamily: 'Inter',
+    textAlign: 'center',
+  },
+  partnerPreviewUsername: {
+    fontSize: 15,
+    color: '#6b7280',
+    fontFamily: 'Inter',
+    marginTop: 4,
+  },
+  partnerPreviewNotOnLinx: {
+    fontSize: 14,
+    color: '#9ca3af',
+    fontFamily: 'Inter',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  partnerPreviewAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 16,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+  },
+  partnerPreviewActionText: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#16a34a',
     fontFamily: 'Inter',
   },
 });

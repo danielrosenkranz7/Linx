@@ -1,16 +1,82 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useDebounce } from '../../hooks/useDebounce';
 import { supabase } from '../../lib/supabase';
+import { toast } from '../../lib/toast';
+
+type QuickCourse = {
+  id: string;
+  name: string;
+  location: string;
+  roundCount?: number;
+  lastPlayed?: string;
+};
 
 export default function SearchCourseScreen() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [recentCourses, setRecentCourses] = useState<QuickCourse[]>([]);
+  const [loadingQuickPicks, setLoadingQuickPicks] = useState(true);
 
   const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
+  useEffect(() => {
+    loadQuickPicks();
+  }, []);
+
+  // Trigger search when debounced query changes
+  useEffect(() => {
+    searchCourses(debouncedSearchQuery);
+  }, [debouncedSearchQuery]);
+
+  const loadQuickPicks = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Get all user's rounds with course info
+      const { data: rounds } = await supabase
+        .from('rounds')
+        .select(`
+          course_id,
+          date_played,
+          course:courses(id, name, location)
+        `)
+        .eq('user_id', user.id)
+        .order('date_played', { ascending: false });
+
+      if (!rounds || rounds.length === 0) {
+        setLoadingQuickPicks(false);
+        return;
+      }
+
+      // Get recent courses (last 3 unique courses played)
+      const seen = new Set<string>();
+      const recent: QuickCourse[] = [];
+      for (const round of rounds) {
+        if (round.course && !seen.has(round.course_id)) {
+          seen.add(round.course_id);
+          recent.push({
+            id: (round.course as any).id,
+            name: (round.course as any).name,
+            location: (round.course as any).location,
+            lastPlayed: round.date_played,
+          });
+          if (recent.length >= 3) break;
+        }
+      }
+      setRecentCourses(recent);
+    } catch {
+      // Silent fail - quick picks are optional
+    } finally {
+      setLoadingQuickPicks(false);
+    }
+  };
 
 const searchCourses = async (query: string) => {
     if (!query || query.length < 3) {
@@ -38,11 +104,9 @@ const searchCourses = async (query: string) => {
       );
 
       const data = await response.json();
-      
-      console.log('API Response:', data);
 
       if (data.error) {
-        alert('API Error: ' + data.error.message);
+        toast.error('Search failed. Please try again.');
         return;
       }
 
@@ -56,12 +120,22 @@ const searchCourses = async (query: string) => {
         }));
         setSearchResults(courses);
       }
-    } catch (error) {
-      console.error('Search error:', error);
-      alert('Search failed: ' + error);
+    } catch {
+      toast.error('Search failed. Please try again.');
     } finally {
       setIsSearching(false);
     }
+  };
+
+  const handleQuickPickSelect = (course: QuickCourse) => {
+    router.push({
+      pathname: '/add-round/date-selection',
+      params: {
+        courseId: course.id,
+        courseName: course.name,
+        courseLocation: course.location,
+      },
+    });
   };
 
   const handleCourseSelect = async (course: any) => {
@@ -92,8 +166,7 @@ const searchCourses = async (query: string) => {
           .single();
 
         if (error) {
-          console.error('Error creating course:', error);
-          alert('Failed to add course. Please try again.');
+          toast.error('Failed to add course. Please try again.');
           return;
         }
 
@@ -108,9 +181,8 @@ const searchCourses = async (query: string) => {
           courseLocation: course.location,
         },
       });
-    } catch (error) {
-      console.error('Error selecting course:', error);
-      alert('Something went wrong. Please try again.');
+    } catch {
+      toast.error('Something went wrong. Please try again.');
     }
   };
 
@@ -133,11 +205,11 @@ const searchCourses = async (query: string) => {
           style={styles.searchInput}
           placeholder="Search for a golf course..."
           value={searchQuery}
-          onChangeText={(text) => {
-            setSearchQuery(text);
-            searchCourses(text);
-          }}
+          onChangeText={setSearchQuery}
           autoFocus
+          autoCorrect={false}
+          autoCapitalize="none"
+          spellCheck={false}
         />
         {isSearching && (
           <ActivityIndicator size="small" color="#16a34a" />
@@ -146,13 +218,56 @@ const searchCourses = async (query: string) => {
 
       <ScrollView style={styles.content}>
         {searchQuery === '' && (
-          <View style={styles.emptyState}>
-            <Ionicons name="golf-outline" size={64} color="#d1d5db" />
-            <Text style={styles.emptyStateText}>Search for any golf course</Text>
-            <Text style={styles.emptyStateSubtext}>
-              Start typing to find courses worldwide
-            </Text>
-          </View>
+          <>
+            {loadingQuickPicks ? (
+              <View style={styles.loadingQuickPicks}>
+                <ActivityIndicator size="small" color="#16a34a" />
+              </View>
+            ) : recentCourses.length > 0 ? (
+              <>
+                {/* Recent Courses */}
+                <View style={styles.quickPickSection}>
+                  <View style={styles.quickPickHeader}>
+                    <Ionicons name="time-outline" size={18} color="#6b7280" />
+                    <Text style={styles.quickPickTitle}>Recently Played</Text>
+                  </View>
+                  {recentCourses.map((course) => (
+                    <TouchableOpacity
+                      key={course.id}
+                      style={styles.quickPickCard}
+                      onPress={() => handleQuickPickSelect(course)}
+                    >
+                      <View style={styles.quickPickIcon}>
+                        <Ionicons name="golf" size={20} color="#16a34a" />
+                      </View>
+                      <View style={styles.quickPickInfo}>
+                        <Text style={styles.quickPickName} numberOfLines={1}>{course.name}</Text>
+                        <Text style={styles.quickPickLocation} numberOfLines={1}>
+                          {course.location}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+
+                {/* Search hint */}
+                <View style={styles.searchHint}>
+                  <Text style={styles.searchHintText}>
+                    Or search for a new course above
+                  </Text>
+                </View>
+              </>
+            ) : (
+              <View style={styles.emptyState}>
+                <Ionicons name="golf-outline" size={64} color="#d1d5db" />
+                <Text style={styles.emptyStateText}>Search for any golf course</Text>
+                <Text style={styles.emptyStateSubtext}>
+                  Start typing to find courses worldwide
+                </Text>
+              </View>
+            )}
+          </>
         )}
 
         {searchQuery !== '' && searchResults.length === 0 && !isSearching && (
@@ -287,6 +402,68 @@ const styles = StyleSheet.create({
   courseLocation: {
     fontSize: 14,
     color: '#6b7280',
+    fontFamily: 'Inter',
+  },
+  loadingQuickPicks: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  quickPickSection: {
+    marginBottom: 24,
+  },
+  quickPickHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  quickPickTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6b7280',
+    fontFamily: 'Inter',
+  },
+  quickPickCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 14,
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  quickPickIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0fdf4',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  quickPickInfo: {
+    flex: 1,
+  },
+  quickPickName: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 2,
+    fontFamily: 'Inter',
+  },
+  quickPickLocation: {
+    fontSize: 13,
+    color: '#6b7280',
+    fontFamily: 'Inter',
+  },
+  searchHint: {
+    alignItems: 'center',
+    paddingVertical: 16,
+  },
+  searchHintText: {
+    fontSize: 14,
+    color: '#9ca3af',
     fontFamily: 'Inter',
   },
 });

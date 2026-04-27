@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { useDebounce } from '../../hooks/useDebounce';
 import { supabase } from '../../lib/supabase';
 import { toast } from '../../lib/toast';
 
@@ -24,6 +25,14 @@ export default function OnboardingHomeCourse() {
   const [saving, setSaving] = useState(false);
 
   const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
+
+  // Trigger search when debounced query changes
+  useEffect(() => {
+    if (!selectedCourse) {
+      searchCourses(debouncedSearchQuery);
+    }
+  }, [debouncedSearchQuery]);
 
   const searchCourses = async (query: string) => {
     if (!query || query.length < 3) {
@@ -60,8 +69,8 @@ export default function OnboardingHomeCourse() {
         }));
         setSearchResults(courses);
       }
-    } catch (error) {
-      console.error('Search error:', error);
+    } catch {
+      // Search failed silently
     } finally {
       setIsSearching(false);
     }
@@ -120,8 +129,7 @@ export default function OnboardingHomeCourse() {
       if (updateError) throw updateError;
 
       router.push('/onboarding/follow');
-    } catch (error) {
-      console.error('Error saving home course:', error);
+    } catch {
       toast.error('Failed to save home course');
     } finally {
       setSaving(false);
@@ -175,7 +183,6 @@ export default function OnboardingHomeCourse() {
               onChangeText={(text) => {
                 setSearchQuery(text);
                 setSelectedCourse(null);
-                searchCourses(text);
               }}
             />
             {isSearching && <ActivityIndicator size="small" color="#16a34a" />}
@@ -405,7 +412,7 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: '#16a34a',
     padding: 18,
-    borderRadius: 14,
+    borderRadius: 12,
   },
   continueButtonDisabled: {
     opacity: 0.6,

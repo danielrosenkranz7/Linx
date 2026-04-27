@@ -306,7 +306,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     backgroundColor: '#f9fafb',
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
@@ -355,7 +355,7 @@ const styles = StyleSheet.create({
   followButton: {
     paddingHorizontal: 18,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: 12,
     backgroundColor: '#16a34a',
   },
   followingButton: {
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: '#16a34a',
     padding: 18,
-    borderRadius: 14,
+    borderRadius: 12,
   },
   completeButtonDisabled: {
     opacity: 0.6,

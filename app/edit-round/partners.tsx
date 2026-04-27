@@ -11,7 +11,7 @@ type Friend = {
   avatar_url?: string;
 };
 
-export default function PartnersScreen() {
+export default function EditPartnersScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const [searchQuery, setSearchQuery] = useState('');
@@ -22,14 +22,60 @@ export default function PartnersScreen() {
 
   useEffect(() => {
     loadFriends();
+    parseExistingPartners();
   }, []);
+
+  const parseExistingPartners = async () => {
+    if (!params.partners) return;
+
+    try {
+      const partnersData = JSON.parse(params.partners as string);
+
+      // Handle both old format (object with selectedFriends/manualNames) and new format (array)
+      if (Array.isArray(partnersData)) {
+        // New format: array of { name, user_id? }
+        const linxPartners: Friend[] = [];
+        const manualPartnerNames: string[] = [];
+
+        for (const partner of partnersData) {
+          if (partner.user_id) {
+            // Fetch full profile info for Linx users
+            const { data: profile } = await supabase
+              .from('profiles')
+              .select('id, name, username, avatar_url')
+              .eq('id', partner.user_id)
+              .single();
+
+            if (profile) {
+              linxPartners.push({
+                id: profile.id,
+                name: profile.name || partner.name,
+                username: profile.username || '',
+                avatar_url: profile.avatar_url,
+              });
+            }
+          } else {
+            manualPartnerNames.push(partner.name);
+          }
+        }
+
+        setSelectedPartners(linxPartners);
+        setManualNames(manualPartnerNames.join(', '));
+      } else if (partnersData.selectedFriends || partnersData.manualNames) {
+        // Old format
+        setSelectedPartners(partnersData.selectedFriends || []);
+        setManualNames(partnersData.manualNames || '');
+      }
+    } catch (error) {
+      console.error('Error parsing partners:', error);
+    }
+  };
 
   const loadFriends = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get users that the current user follows
       const { data, error } = await supabase
         .from('friendships')
         .select(`
@@ -44,7 +90,6 @@ export default function PartnersScreen() {
 
       if (error) throw error;
 
-      // Extract the friend profiles
       const friends = (data || [])
         .map(item => {
           const f = Array.isArray(item.following) ? item.following[0] : item.following;
@@ -71,7 +116,7 @@ export default function PartnersScreen() {
     friend.username.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const togglePartner = (friend: any) => {
+  const togglePartner = (friend: Friend) => {
     if (selectedPartners.some(p => p.id === friend.id)) {
       setSelectedPartners(selectedPartners.filter(p => p.id !== friend.id));
     } else {
@@ -86,7 +131,7 @@ export default function PartnersScreen() {
     };
 
     router.push({
-      pathname: '/add-round/score',
+      pathname: '/edit-round/score',
       params: {
         ...params,
         partners: JSON.stringify(partnersData),
@@ -96,7 +141,7 @@ export default function PartnersScreen() {
 
   const handleSkip = () => {
     router.push({
-      pathname: '/add-round/score',
+      pathname: '/edit-round/score',
       params: {
         ...params,
         partners: JSON.stringify({ selectedFriends: [], manualNames: '' }),
@@ -108,7 +153,7 @@ export default function PartnersScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity 
+        <TouchableOpacity
           onPress={() => router.back()}
           style={styles.backButton}
         >
@@ -210,7 +255,7 @@ export default function PartnersScreen() {
 
       {/* Continue Button */}
       <View style={styles.footer}>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.continueButton}
           onPress={handleContinue}
         >

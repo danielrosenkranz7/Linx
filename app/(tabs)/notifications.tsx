@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { colors } from '../../lib/colors';
 import { handleError } from '../../lib/errors';
 import { supabase } from '../../lib/supabase';
 
@@ -112,8 +113,8 @@ export default function NotificationsScreen() {
     if (notification.type === 'follow') {
       router.push(`/user/${notification.actor.id}`);
     } else if (notification.round) {
-      // Navigate to the round/course detail
-      router.push(`/course/${notification.round.id}`);
+      // Navigate to the round detail page
+      router.push(`/round/${notification.round.id}`);
     }
   };
 
@@ -159,13 +160,13 @@ export default function NotificationsScreen() {
   const getIconColor = (type: string) => {
     switch (type) {
       case 'follow':
-        return '#3b82f6';
+        return colors.info;      // Blue - informational
       case 'like':
-        return '#ef4444';
+        return colors.error;     // Red - heart/love
       case 'comment':
-        return '#16a34a';
+        return colors.success;   // Green - engagement
       default:
-        return '#6b7280';
+        return colors.textSecondary;
     }
   };
 
@@ -189,27 +190,27 @@ export default function NotificationsScreen() {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#16a34a" />
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Notifications</Text>
-        {unreadCount > 0 && (
+      {/* Minimal header - just mark all read when needed */}
+      {unreadCount > 0 && (
+        <View style={styles.markAllHeader}>
           <TouchableOpacity onPress={markAllAsRead}>
             <Text style={styles.markAllRead}>Mark all read</Text>
           </TouchableOpacity>
-        )}
-      </View>
+        </View>
+      )}
 
       <ScrollView
         style={styles.content}
+        contentContainerStyle={unreadCount === 0 ? styles.contentWithPadding : undefined}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#16a34a" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
         }
       >
         {notifications.length === 0 ? (
@@ -289,21 +290,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  markAllHeader: {
+    alignItems: 'flex-end',
     paddingHorizontal: 20,
     paddingTop: 60,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    fontFamily: 'Inter',
+    paddingBottom: 12,
   },
   markAllRead: {
     fontSize: 14,
@@ -313,6 +304,9 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  contentWithPadding: {
+    paddingTop: 60,
   },
   emptyContainer: {
     flex: 1,

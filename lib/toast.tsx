@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Animated, StyleSheet, Text } from 'react-native';
+import { colors } from './colors';
 
-type ToastType = 'error' | 'success' | 'info';
+type ToastType = 'error' | 'success' | 'info' | 'warning';
 
 type ToastMessage = {
   id: number;
@@ -16,6 +17,7 @@ export const toast = {
   error: (message: string) => addToastFn?.(message, 'error'),
   success: (message: string) => addToastFn?.(message, 'success'),
   info: (message: string) => addToastFn?.(message, 'info'),
+  warning: (message: string) => addToastFn?.(message, 'warning'),
 };
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
@@ -64,7 +66,13 @@ function Toast({ message, type, index }: { message: string; type: ToastType; ind
     ]).start();
   }, []);
 
-  const backgroundColor = type === 'error' ? '#ef4444' : type === 'success' ? '#16a34a' : '#3b82f6';
+  const backgroundColors: Record<ToastType, string> = {
+    error: colors.error,
+    success: colors.success,
+    info: colors.info,
+    warning: colors.warning,
+  };
+  const backgroundColor = backgroundColors[type];
 
   return (
     <Animated.View

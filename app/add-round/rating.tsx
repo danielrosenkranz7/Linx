@@ -150,9 +150,30 @@ export default function RatingScreen() {
       }
 
       // Parse params
-      const partners = params.partners ? JSON.parse(params.partners as string) : { selectedFriends: [], manualNames: '' };
+      const partnersData = params.partners ? JSON.parse(params.partners as string) : { selectedFriends: [], manualNames: '' };
       const localPhotos = params.photos ? JSON.parse(params.photos as string) : [];
       const tees = params.tees ? JSON.parse(params.tees as string) : null;
+
+      // Build partners array with user IDs for Linx users
+      const partnersArray: Array<{ name: string; user_id?: string }> = [];
+
+      // Add Linx friends with their user IDs
+      if (partnersData.selectedFriends && partnersData.selectedFriends.length > 0) {
+        partnersData.selectedFriends.forEach((friend: any) => {
+          partnersArray.push({
+            name: friend.name,
+            user_id: friend.id,
+          });
+        });
+      }
+
+      // Add manual names (no user_id)
+      if (partnersData.manualNames) {
+        const manualNames = partnersData.manualNames.split(',').map((n: string) => n.trim()).filter(Boolean);
+        manualNames.forEach((name: string) => {
+          partnersArray.push({ name });
+        });
+      }
 
       // Upload photos to Supabase Storage
       let uploadedPhotoUrls: string[] = [];
@@ -168,11 +189,9 @@ export default function RatingScreen() {
         score: params.score ? parseInt(params.score as string) : null,
         date_played: params.datePlayed ? new Date(params.datePlayed as string).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
         notes: params.notes || null,
-        partners: partners.manualNames || null,
+        partners: partnersArray.length > 0 ? JSON.stringify(partnersArray) : null,
         photos: uploadedPhotoUrls.length > 0 ? uploadedPhotoUrls : null,
       };
-
-      console.log('Submitting round:', roundData);
 
       // Insert into database
       const { data, error } = await supabase

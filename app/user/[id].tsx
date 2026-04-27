@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 24,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: 12,
     backgroundColor: '#16a34a',
   },
   followingButton: {

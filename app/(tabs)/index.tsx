@@ -310,10 +310,11 @@ export default function HomeScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.logo}>Linx</Text>
-            <Text style={styles.slogan}>Your Golf Community</Text>
-          </View>
+          <Image
+            source={require('../../assets/images/icon.png')}
+            style={styles.headerLogo}
+            resizeMode="contain"
+          />
           <TouchableOpacity style={styles.searchButton} onPress={() => setShowSearch(true)}>
             <Ionicons name="search" size={24} color="#6b7280" />
           </TouchableOpacity>
@@ -329,10 +330,11 @@ export default function HomeScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <Text style={styles.logo}>Linx</Text>
-          <Text style={styles.slogan}>Your Golf Community</Text>
-        </View>
+        <Image
+          source={require('../../assets/images/icon.png')}
+          style={styles.headerLogo}
+          resizeMode="contain"
+        />
         <TouchableOpacity style={styles.searchButton} onPress={() => setShowSearch(true)}>
           <Ionicons name="search" size={24} color="#6b7280" />
         </TouchableOpacity>
@@ -542,13 +544,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingTop: 60,
-    paddingBottom: 20,
+    paddingBottom: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
   },
-  headerLeft: {
-    flex: 1,
+  headerLogo: {
+    width: 48,
+    height: 48,
   },
   searchButton: {
     width: 44,
@@ -558,18 +561,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  logo: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    fontFamily: 'Inter',
-  },
-  slogan: {
-    fontSize: 14,
-    color: '#6b7280',
-    marginTop: 4,
-    fontFamily: 'Inter',
-  },
   toggleContainer: {
     paddingHorizontal: 20,
     paddingVertical: 16,
@@ -577,7 +568,7 @@ const styles = StyleSheet.create({
   toggle: {
     flexDirection: 'row',
     backgroundColor: '#f3f4f6',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 4,
   },
   toggleOption: {
@@ -668,7 +659,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     paddingVertical: 10,
-    borderRadius: 10,
+    borderRadius: 6,
   },
   segmentActive: {
     backgroundColor: '#16a34a',
@@ -782,7 +773,7 @@ const styles = StyleSheet.create({
   followButton: {
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 16,
+    borderRadius: 12,
     backgroundColor: '#16a34a',
   },
   followingButton: {

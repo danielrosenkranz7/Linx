@@ -152,8 +152,30 @@ export default function EditRatingScreen() {
         return;
       }
 
-      // Parse photos
+      // Parse photos and partners
       const localPhotos = params.photos ? JSON.parse(params.photos as string) : [];
+      const partnersData = params.partners ? JSON.parse(params.partners as string) : { selectedFriends: [], manualNames: '' };
+
+      // Build partners array with user IDs for Linx users
+      const partnersArray: Array<{ name: string; user_id?: string }> = [];
+
+      // Add Linx friends with their user IDs
+      if (partnersData.selectedFriends && partnersData.selectedFriends.length > 0) {
+        partnersData.selectedFriends.forEach((friend: any) => {
+          partnersArray.push({
+            name: friend.name,
+            user_id: friend.id,
+          });
+        });
+      }
+
+      // Add manual names (no user_id)
+      if (partnersData.manualNames) {
+        const manualNames = partnersData.manualNames.split(',').map((n: string) => n.trim()).filter(Boolean);
+        manualNames.forEach((name: string) => {
+          partnersArray.push({ name });
+        });
+      }
 
       // Upload any new photos
       let uploadedPhotoUrls: string[] = [];
@@ -167,11 +189,10 @@ export default function EditRatingScreen() {
         score: params.score ? parseInt(params.score as string) : null,
         holes: params.holes || '18',
         notes: params.notes || null,
-        partners: params.partners || null,
+        partners: partnersArray.length > 0 ? JSON.stringify(partnersArray) : null,
         photos: uploadedPhotoUrls.length > 0 ? uploadedPhotoUrls : null,
+        date_played: params.datePlayed ? new Date(params.datePlayed as string).toISOString().split('T')[0] : null,
       };
-
-      console.log('Updating round:', params.roundId, roundData);
 
       // Update in database
       const { error } = await supabase
@@ -183,6 +204,18 @@ export default function EditRatingScreen() {
         handleError(error, 'Updating round');
         setIsSubmitting(false);
         return;
+      }
+
+      // Sync rating across ALL user's rounds at this course
+      const { error: syncError } = await supabase
+        .from('rounds')
+        .update({ rating: rating })
+        .eq('user_id', user.id)
+        .eq('course_id', params.courseId);
+
+      if (syncError) {
+        console.error('Error syncing rating:', syncError);
+        // Don't fail the whole operation, just log it
       }
 
       // Success!

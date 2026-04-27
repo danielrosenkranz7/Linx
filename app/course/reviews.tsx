@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
   sortButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 6,
     backgroundColor: '#f3f4f6',
   },
   sortButtonActive: {
@@ -438,7 +438,7 @@ const styles = StyleSheet.create({
   photoThumb: {
     width: 70,
     height: 70,
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   photoImage: {

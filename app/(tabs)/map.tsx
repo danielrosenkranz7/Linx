@@ -6,7 +6,6 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import MapView, { Callout, Marker, Region } from 'react-native-maps';
 import { handleError } from '../../lib/errors';
 import { supabase } from '../../lib/supabase';
-import { toast } from '../../lib/toast';
 
 type Course = {
   id: string;
@@ -15,15 +14,22 @@ type Course = {
   latitude: number;
   longitude: number;
   avg_rating?: number;
+  user_rating?: number;
   distance?: number;
-  osm_id?: string;
-  isFromOSM?: boolean;
+  isFromDatabase?: boolean;
 };
 
 const DEFAULT_DELTA = {
   latitudeDelta: 0.3,
   longitudeDelta: 0.3,
 };
+
+// Multiple Overpass API endpoints for redundancy
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+];
 
 // Calculate distance between two coordinates in miles
 const getDistanceMiles = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -36,6 +42,88 @@ const getDistanceMiles = (lat1: number, lon1: number, lat2: number, lon2: number
     Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return R * c;
+};
+
+// Fetch golf courses from Overpass API with retry logic
+const fetchCoursesFromOverpass = async (
+  lat: number,
+  lng: number,
+  radiusMeters: number
+): Promise<Course[]> => {
+  const query = `
+    [out:json][timeout:25];
+    (
+      way["leisure"="golf_course"](around:${radiusMeters},${lat},${lng});
+      relation["leisure"="golf_course"](around:${radiusMeters},${lat},${lng});
+      node["leisure"="golf_course"](around:${radiusMeters},${lat},${lng});
+    );
+    out center tags;
+  `;
+
+  // Try each endpoint until one works
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `data=${encodeURIComponent(query)}`,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        console.warn(`Overpass endpoint ${endpoint} returned ${response.status}`);
+        continue;
+      }
+
+      const data = await response.json();
+
+      if (!data.elements || !Array.isArray(data.elements)) {
+        continue;
+      }
+
+      const courses: Course[] = data.elements
+        .filter((el: any) => el.tags?.name)
+        .map((el: any) => {
+          const courseLat = el.center?.lat || el.lat;
+          const courseLng = el.center?.lon || el.lon;
+
+          if (!courseLat || !courseLng) return null;
+
+          // Build location string from address tags
+          const city = el.tags['addr:city'] || '';
+          const state = el.tags['addr:state'] || '';
+          const location = [city, state].filter(Boolean).join(', ') || 'Golf Course';
+
+          return {
+            id: `osm-${el.id}`,
+            name: el.tags.name,
+            location,
+            latitude: courseLat,
+            longitude: courseLng,
+            distance: getDistanceMiles(lat, lng, courseLat, courseLng),
+            isFromDatabase: false,
+          };
+        })
+        .filter(Boolean) as Course[];
+
+      return courses;
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.warn(`Overpass endpoint ${endpoint} timed out`);
+      } else {
+        console.warn(`Overpass endpoint ${endpoint} failed:`, error.message);
+      }
+      continue;
+    }
+  }
+
+  // All endpoints failed
+  return [];
 };
 
 export default function MapScreen() {
@@ -57,18 +145,19 @@ export default function MapScreen() {
 
   const initializeMap = async () => {
     try {
-      // Request location permissions
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
         setErrorMsg('Location permission denied');
-        setRegion({
+        const defaultRegion = {
           latitude: 37.7749,
           longitude: -122.4194,
           ...DEFAULT_DELTA,
-        });
+        };
+        setRegion(defaultRegion);
+        setLastSearchedRegion(defaultRegion);
+        setCurrentMapRegion(defaultRegion);
         setLoading(false);
-        // Load courses in background
-        loadCourses(37.7749, -122.4194, 10);
+        loadCourses(37.7749, -122.4194);
         return;
       }
 
@@ -84,39 +173,18 @@ export default function MapScreen() {
         setLastSearchedRegion(quickRegion);
         setCurrentMapRegion(quickRegion);
         setLocation(lastKnown);
-        setLoading(false); // Show map immediately
-
-        // Start loading courses in background
-        loadCourses(lastKnown.coords.latitude, lastKnown.coords.longitude, 10);
+        setLoading(false);
+        loadCourses(lastKnown.coords.latitude, lastKnown.coords.longitude);
       }
 
       // Get accurate location in background
-      Location.getCurrentPositionAsync({
+      const currentLocation = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
-      }).then(currentLocation => {
-        setLocation(currentLocation);
-
-        // Only update if significantly different from last known
-        if (!lastKnown) {
-          const newRegion = {
-            latitude: currentLocation.coords.latitude,
-            longitude: currentLocation.coords.longitude,
-            ...DEFAULT_DELTA,
-          };
-          setRegion(newRegion);
-          setLastSearchedRegion(newRegion);
-          setCurrentMapRegion(newRegion);
-          setLoading(false);
-          loadCourses(currentLocation.coords.latitude, currentLocation.coords.longitude, 10);
-        }
       });
 
-      // If no last known location, wait for current
+      setLocation(currentLocation);
+
       if (!lastKnown) {
-        const currentLocation = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.Balanced,
-        });
-        setLocation(currentLocation);
         const newRegion = {
           latitude: currentLocation.coords.latitude,
           longitude: currentLocation.coords.longitude,
@@ -126,254 +194,115 @@ export default function MapScreen() {
         setLastSearchedRegion(newRegion);
         setCurrentMapRegion(newRegion);
         setLoading(false);
-        loadCourses(currentLocation.coords.latitude, currentLocation.coords.longitude, 10);
+        loadCourses(currentLocation.coords.latitude, currentLocation.coords.longitude);
       }
     } catch (error) {
       handleError(error, 'Getting location');
       setErrorMsg('Failed to get location');
-      setRegion({
+      const defaultRegion = {
         latitude: 37.7749,
         longitude: -122.4194,
         ...DEFAULT_DELTA,
-      });
+      };
+      setRegion(defaultRegion);
+      setLastSearchedRegion(defaultRegion);
+      setCurrentMapRegion(defaultRegion);
       setLoading(false);
-      loadCourses(37.7749, -122.4194, 10);
+      loadCourses(37.7749, -122.4194);
     }
   };
 
-  const loadCourses = async (lat: number, lng: number, radiusMiles: number = 10) => {
+  const loadCourses = async (lat: number, lng: number, radiusMiles: number = 25) => {
     try {
-      // Load local courses FIRST (instant) - show something immediately
-      await loadCoursesFromDatabase(lat, lng, radiusMiles);
+      const radiusMeters = radiusMiles * 1609.34;
 
-      // Then fetch from OSM in background to supplement
-      const radiusMeters = Math.min(Math.round(radiusMiles * 1609.34), 30000); // Cap at 30km for speed
+      // Fetch from OpenStreetMap
+      const osmCourses = await fetchCoursesFromOverpass(lat, lng, radiusMeters);
 
-      console.log('Fetching golf courses from OSM:', lat, lng, 'radius:', radiusMeters);
+      // Also fetch from our database (for user-added courses with ratings)
+      const { data: dbCourses } = await supabase
+        .from('courses')
+        .select('id, name, location, latitude, longitude')
+        .not('latitude', 'is', null)
+        .not('longitude', 'is', null);
 
-      // Overpass API query - only ways and relations (nodes are rarely golf courses)
-      const overpassQuery = `[out:json][timeout:10];(way["leisure"="golf_course"](around:${radiusMeters},${lat},${lng});relation["leisure"="golf_course"](around:${radiusMeters},${lat},${lng}););out center tags;`;
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
 
-      // Use a faster Overpass mirror with timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+      // Get ratings for database courses
+      let ratingsMap: Record<string, { total: number; count: number }> = {};
+      let userRatingsMap: Record<string, number> = {};
+      if (dbCourses && dbCourses.length > 0) {
+        const courseIds = dbCourses.map(c => c.id);
+        const { data: roundsData } = await supabase
+          .from('rounds')
+          .select('course_id, rating, user_id')
+          .in('course_id', courseIds);
 
-      const response = await fetch('https://overpass.kumi.systems/api/interpreter', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: `data=${encodeURIComponent(overpassQuery)}`,
-        signal: controller.signal,
-      });
+        (roundsData || []).forEach(round => {
+          if (!ratingsMap[round.course_id]) {
+            ratingsMap[round.course_id] = { total: 0, count: 0 };
+          }
+          ratingsMap[round.course_id].total += round.rating;
+          ratingsMap[round.course_id].count += 1;
 
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        console.error('Overpass API HTTP error:', response.status);
-        // Already have local courses, just return
-        return;
+          // Track current user's rating
+          if (user && round.user_id === user.id && !userRatingsMap[round.course_id]) {
+            userRatingsMap[round.course_id] = round.rating;
+          }
+        });
       }
 
-      const data = await response.json();
+      // Process database courses
+      const dbCoursesProcessed: Course[] = (dbCourses || [])
+        .filter(course => course.latitude && course.longitude)
+        .map(course => ({
+          ...course,
+          distance: getDistanceMiles(lat, lng, course.latitude, course.longitude),
+          avg_rating: ratingsMap[course.id]
+            ? ratingsMap[course.id].total / ratingsMap[course.id].count
+            : undefined,
+          user_rating: userRatingsMap[course.id],
+          isFromDatabase: true,
+        }))
+        .filter(course => course.distance <= radiusMiles);
 
-      console.log('Overpass results:', data.elements?.length || 0);
+      // Merge: prefer database courses (they have ratings), add OSM courses that aren't duplicates
+      const mergedCourses: Course[] = [...dbCoursesProcessed];
+      const dbNames = new Set(dbCoursesProcessed.map(c => c.name.toLowerCase()));
 
-      if (!data.elements || data.elements.length === 0) {
-        console.log('No additional golf courses from OSM');
-        // Keep existing local courses
-        return;
-      }
-
-      // Log sample
-      if (data.elements.length > 0) {
-        console.log('Sample:', data.elements.slice(0, 3).map((e: any) => e.tags?.name || 'Unnamed'));
-      }
-
-      // Parse OSM results
-      const osmCourses: Course[] = data.elements
-        .filter((element: any) => {
-          // Must have coordinates (center for ways/relations, or direct lat/lon for nodes)
-          const hasCoords = (element.center?.lat && element.center?.lon) || (element.lat && element.lon);
-          return hasCoords;
-        })
-        .map((element: any) => {
-          const latitude = element.center?.lat || element.lat;
-          const longitude = element.center?.lon || element.lon;
-          const name = element.tags?.name || 'Golf Course';
-          const city = element.tags?.['addr:city'] || '';
-          const state = element.tags?.['addr:state'] || '';
-          const location = [city, state].filter(Boolean).join(', ') || 'Location unavailable';
-
-          return {
-            id: `osm_${element.type}_${element.id}`,
-            osm_id: `${element.type}/${element.id}`,
-            name,
-            location,
-            latitude,
-            longitude,
-            distance: getDistanceMiles(lat, lng, latitude, longitude),
-            isFromOSM: true,
-          };
+      osmCourses.forEach(osmCourse => {
+        // Check if this course is already in our database (by name similarity)
+        const isDuplicate = dbCoursesProcessed.some(dbCourse => {
+          const nameSimilar = dbCourse.name.toLowerCase().includes(osmCourse.name.toLowerCase()) ||
+            osmCourse.name.toLowerCase().includes(dbCourse.name.toLowerCase());
+          const distanceClose = getDistanceMiles(
+            dbCourse.latitude,
+            dbCourse.longitude,
+            osmCourse.latitude,
+            osmCourse.longitude
+          ) < 0.5; // Within 0.5 miles
+          return nameSimilar && distanceClose;
         });
 
-      console.log('Golf courses found:', osmCourses.length);
-
-      // Also load courses from our database to get ratings
-      const { data: localCourses } = await supabase
-        .from('courses')
-        .select('id, name, location, latitude, longitude, osm_id')
-        .not('latitude', 'is', null);
-
-      // Get ratings for local courses
-      const localCourseIds = (localCourses || []).map(c => c.id);
-      const { data: roundsData } = await supabase
-        .from('rounds')
-        .select('course_id, rating')
-        .in('course_id', localCourseIds);
-
-      // Calculate average ratings
-      const ratingsMap: Record<string, { total: number; count: number }> = {};
-      (roundsData || []).forEach(round => {
-        if (!ratingsMap[round.course_id]) {
-          ratingsMap[round.course_id] = { total: 0, count: 0 };
+        if (!isDuplicate && osmCourse.distance <= radiusMiles) {
+          mergedCourses.push(osmCourse);
         }
-        ratingsMap[round.course_id].total += round.rating;
-        ratingsMap[round.course_id].count += 1;
-      });
-
-      // Add ratings to local courses
-      const localCoursesWithRatings = (localCourses || []).map(course => ({
-        ...course,
-        avg_rating: ratingsMap[course.id]
-          ? ratingsMap[course.id].total / ratingsMap[course.id].count
-          : undefined,
-      }));
-
-      console.log('Local courses with ratings:', localCoursesWithRatings.map(c => ({ name: c.name, avg: c.avg_rating })));
-
-      // Helper to normalize course names for comparison
-      const normalizeName = (name: string) => {
-        return name.toLowerCase()
-          .replace(/golf course/g, '')
-          .replace(/golf club/g, '')
-          .replace(/country club/g, '')
-          .replace(/golf/g, '')
-          .replace(/club/g, '')
-          .replace(/&/g, 'and')
-          .replace(/[^a-z0-9]/g, '')
-          .trim();
-      };
-
-      // Merge OSM results with local data (ratings)
-      const mergedCourses = osmCourses.map(course => {
-        // First try exact osm_id match
-        let localData = localCoursesWithRatings.find(lc => lc.osm_id === course.osm_id);
-
-        // If no osm_id match, try matching by normalized name
-        if (!localData) {
-          const osmNormalized = normalizeName(course.name);
-          localData = localCoursesWithRatings.find(lc => {
-            const localNormalized = normalizeName(lc.name);
-            return localNormalized === osmNormalized ||
-                   localNormalized.includes(osmNormalized) ||
-                   osmNormalized.includes(localNormalized);
-          });
-        }
-
-        // If still no match, try matching by coordinates (within 0.3 miles)
-        if (!localData) {
-          localData = localCoursesWithRatings.find(lc => {
-            if (!lc.latitude || !lc.longitude) return false;
-            const dist = getDistanceMiles(course.latitude, course.longitude, lc.latitude, lc.longitude);
-            return dist < 0.3;
-          });
-        }
-
-        if (localData) {
-          console.log('Matched:', course.name, '→', localData.name, 'rating:', localData.avg_rating);
-          return {
-            ...course,
-            id: localData.id,
-            avg_rating: localData.avg_rating,
-            isFromOSM: false,
-          };
-        }
-        return course;
       });
 
       // Sort by distance
       mergedCourses.sort((a, b) => (a.distance || 0) - (b.distance || 0));
 
-      // Merge with existing courses (from local DB)
-      setCourses(prevCourses => {
-        const seen = new Set<string>();
-        // Add existing local courses first
-        prevCourses.forEach(c => seen.add(c.id));
+      setCourses(mergedCourses);
 
-        // Add new OSM courses that aren't duplicates
-        const newCourses = mergedCourses.filter(course => {
-          if (seen.has(course.id)) return false;
-          seen.add(course.id);
-          return true;
-        });
-
-        // Combine and sort by distance
-        const combined = [...prevCourses, ...newCourses];
-        combined.sort((a, b) => (a.distance || 0) - (b.distance || 0));
-        return combined;
-      });
-    } catch (error) {
-      // OSM failed, but we already have local courses loaded
-      console.log('OSM fetch failed, using local courses only');
-    }
-  };
-
-  const loadCoursesFromDatabase = async (lat: number, lng: number, radiusMiles: number) => {
-    try {
-      const { data: coursesData } = await supabase
-        .from('courses')
-        .select('id, name, location, latitude, longitude, osm_id')
-        .not('latitude', 'is', null);
-
-      if (!coursesData || coursesData.length === 0) {
-        setCourses([]);
-        return;
+      if (mergedCourses.length === 0 && osmCourses.length === 0) {
+        setErrorMsg('Could not load courses. Try again later.');
+      } else {
+        setErrorMsg(null);
       }
-
-      const nearbyCourses = coursesData
-        .map(course => ({
-          ...course,
-          distance: getDistanceMiles(lat, lng, course.latitude, course.longitude),
-        }))
-        .filter(course => course.distance <= radiusMiles)
-        .sort((a, b) => a.distance - b.distance);
-
-      const courseIds = nearbyCourses.map(c => c.id);
-      const { data: roundsData } = await supabase
-        .from('rounds')
-        .select('course_id, rating')
-        .in('course_id', courseIds);
-
-      const ratingsMap: Record<string, { total: number; count: number }> = {};
-      (roundsData || []).forEach(round => {
-        if (!ratingsMap[round.course_id]) {
-          ratingsMap[round.course_id] = { total: 0, count: 0 };
-        }
-        ratingsMap[round.course_id].total += round.rating;
-        ratingsMap[round.course_id].count += 1;
-      });
-
-      const coursesWithRatings = nearbyCourses.map(course => ({
-        ...course,
-        avg_rating: ratingsMap[course.id]
-          ? ratingsMap[course.id].total / ratingsMap[course.id].count
-          : undefined,
-      }));
-
-      setCourses(coursesWithRatings);
     } catch (error) {
-      console.error('Error loading from database:', error);
+      console.error('Error loading courses:', error);
+      setErrorMsg('Failed to load courses');
       setCourses([]);
     }
   };
@@ -381,7 +310,6 @@ export default function MapScreen() {
   const onRegionChangeComplete = (newRegion: Region) => {
     setCurrentMapRegion(newRegion);
 
-    // Show "Search Here" button if user has moved significantly from last search
     if (lastSearchedRegion) {
       const distanceMoved = getDistanceMiles(
         lastSearchedRegion.latitude,
@@ -389,9 +317,10 @@ export default function MapScreen() {
         newRegion.latitude,
         newRegion.longitude
       );
-      // Show button if moved more than 5 miles
       if (distanceMoved > 5) {
         setShowSearchHere(true);
+      } else {
+        setShowSearchHere(false);
       }
     }
   };
@@ -401,64 +330,40 @@ export default function MapScreen() {
 
     setSearching(true);
     setShowSearchHere(false);
+    setErrorMsg(null);
 
-    // Calculate radius based on zoom level - smaller when zoomed in
-    const zoomBasedRadius = currentMapRegion.latitudeDelta * 40; // tighter radius
-    const radiusMiles = Math.min(Math.max(zoomBasedRadius, 5), 15); // 5-15 mile range
+    // Calculate radius based on zoom level
+    const zoomBasedRadius = Math.max(currentMapRegion.latitudeDelta * 40, 15);
+    const radiusMiles = Math.min(zoomBasedRadius, 50);
 
-    await loadCourses(currentMapRegion.latitude, currentMapRegion.longitude, radiusMiles);
+    await loadCourses(
+      currentMapRegion.latitude,
+      currentMapRegion.longitude,
+      radiusMiles
+    );
+
     setLastSearchedRegion(currentMapRegion);
     setSearching(false);
   };
 
   const centerOnUser = async () => {
     if (location && mapRef.current) {
-      mapRef.current.animateToRegion({
+      const userRegion = {
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
         ...DEFAULT_DELTA,
-      });
+      };
+      mapRef.current.animateToRegion(userRegion);
+
+      await loadCourses(location.coords.latitude, location.coords.longitude);
+      setLastSearchedRegion(userRegion);
+      setShowSearchHere(false);
     }
   };
 
-  const handleCoursePress = async (course: Course) => {
-    if (course.isFromOSM && course.osm_id) {
-      // Course is from OSM and not in our DB yet - save it first
-      try {
-        const { data, error } = await supabase
-          .from('courses')
-          .insert({
-            name: course.name,
-            location: course.location,
-            latitude: course.latitude,
-            longitude: course.longitude,
-            osm_id: course.osm_id,
-          })
-          .select('id')
-          .single();
-
-        if (error) {
-          // Might already exist, try to fetch it
-          const { data: existing } = await supabase
-            .from('courses')
-            .select('id')
-            .eq('osm_id', course.osm_id)
-            .single();
-
-          if (existing) {
-            router.push(`/course/${existing.id}`);
-            return;
-          }
-          console.error('Error saving course:', error);
-          return;
-        }
-
-        router.push(`/course/${data.id}`);
-      } catch (error) {
-        console.error('Error handling course press:', error);
-      }
-    } else {
-      // Course is already in our DB
+  const handleCoursePress = (course: Course) => {
+    // Only navigate to detail if it's a database course
+    if (course.isFromDatabase) {
       router.push(`/course/${course.id}`);
     }
   };
@@ -474,12 +379,6 @@ export default function MapScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Explore Courses</Text>
-        <Text style={styles.headerSubtitle}>{courses.length} courses nearby</Text>
-      </View>
-
       {/* Map */}
       <View style={styles.mapContainer}>
         <MapView
@@ -501,7 +400,7 @@ export default function MapScreen() {
                 latitude: course.latitude,
                 longitude: course.longitude,
               }}
-              pinColor="#16a34a"
+              pinColor={course.user_rating ? '#16a34a' : '#3b82f6'}
             >
               <Callout
                 tooltip
@@ -511,17 +410,35 @@ export default function MapScreen() {
                   <Text style={styles.calloutTitle}>{course.name}</Text>
                   <View style={styles.calloutDetails}>
                     <Ionicons name="location-outline" size={12} color="#6b7280" />
-                    <Text style={styles.calloutLocation}>{course.location}</Text>
+                    <Text style={styles.calloutLocation} numberOfLines={2}>
+                      {course.location}
+                    </Text>
                   </View>
-                  {course.avg_rating && (
+                  {course.user_rating ? (
                     <View style={styles.calloutRating}>
                       <Ionicons name="golf" size={14} color="#16a34a" />
                       <Text style={styles.calloutRatingText}>
-                        {course.avg_rating.toFixed(1)} avg
+                        {course.user_rating.toFixed(1)}
                       </Text>
                     </View>
+                  ) : course.avg_rating ? (
+                    <View style={styles.calloutRating}>
+                      <Ionicons name="golf" size={14} color="#16a34a" />
+                      <Text style={styles.calloutRatingText}>
+                        {course.avg_rating.toFixed(1)} (avg)
+                      </Text>
+                    </View>
+                  ) : null}
+                  {course.distance !== undefined && (
+                    <Text style={styles.calloutDistance}>
+                      {course.distance.toFixed(1)} miles away
+                    </Text>
                   )}
-                  <Text style={styles.calloutTap}>Tap for details</Text>
+                  {course.isFromDatabase ? (
+                    <Text style={styles.calloutTap}>Tap for details</Text>
+                  ) : (
+                    <Text style={styles.calloutHint}>Log a round to add ratings</Text>
+                  )}
                 </View>
               </Callout>
             </Marker>
@@ -530,13 +447,17 @@ export default function MapScreen() {
 
         {/* Search Here button */}
         {showSearchHere && (
-          <TouchableOpacity style={styles.searchHereButton} onPress={searchHere} disabled={searching}>
+          <TouchableOpacity
+            style={styles.searchHereButton}
+            onPress={searchHere}
+            disabled={searching}
+          >
             {searching ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <>
                 <Ionicons name="search" size={16} color="#fff" />
-                <Text style={styles.searchHereText}>Search Here</Text>
+                <Text style={styles.searchHereText}>Search This Area</Text>
               </>
             )}
           </TouchableOpacity>
@@ -548,12 +469,27 @@ export default function MapScreen() {
             <Ionicons name="locate" size={24} color="#16a34a" />
           </TouchableOpacity>
         )}
+
+        {/* Legend */}
+        <View style={styles.legend}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#16a34a' }]} />
+            <Text style={styles.legendText}>You've Played</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#3b82f6' }]} />
+            <Text style={styles.legendText}>Discover</Text>
+          </View>
+        </View>
       </View>
 
       {/* Error message */}
       {errorMsg && (
         <View style={styles.errorBanner}>
           <Text style={styles.errorText}>{errorMsg}</Text>
+          <TouchableOpacity onPress={() => searchHere()}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -606,7 +542,7 @@ const styles = StyleSheet.create({
   },
   searchHereButton: {
     position: 'absolute',
-    top: 16,
+    top: 60,
     alignSelf: 'center',
     flexDirection: 'row',
     alignItems: 'center',
@@ -643,6 +579,35 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 4,
   },
+  legend: {
+    position: 'absolute',
+    bottom: 100,
+    left: 20,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
+  legendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  legendText: {
+    fontSize: 12,
+    color: '#6b7280',
+    fontFamily: 'Inter',
+  },
   callout: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -664,7 +629,7 @@ const styles = StyleSheet.create({
   },
   calloutDetails: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 4,
     marginBottom: 6,
   },
@@ -678,7 +643,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginBottom: 8,
+    marginBottom: 4,
   },
   calloutRatingText: {
     fontSize: 14,
@@ -686,27 +651,51 @@ const styles = StyleSheet.create({
     color: '#16a34a',
     fontFamily: 'Inter',
   },
+  calloutDistance: {
+    fontSize: 12,
+    color: '#9ca3af',
+    fontFamily: 'Inter',
+    marginBottom: 6,
+  },
   calloutTap: {
+    fontSize: 12,
+    color: '#16a34a',
+    fontFamily: 'Inter',
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  calloutHint: {
     fontSize: 12,
     color: '#9ca3af',
     fontFamily: 'Inter',
     textAlign: 'center',
+    fontStyle: 'italic',
   },
   errorBanner: {
     position: 'absolute',
-    top: 120,
+    top: 130,
     left: 20,
     right: 20,
     backgroundColor: '#fef2f2',
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     borderWidth: 1,
     borderColor: '#fecaca',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   errorText: {
     fontSize: 14,
     color: '#dc2626',
-    textAlign: 'center',
     fontFamily: 'Inter',
+    flex: 1,
+  },
+  retryText: {
+    fontSize: 14,
+    color: '#dc2626',
+    fontWeight: '600',
+    fontFamily: 'Inter',
+    marginLeft: 12,
   },
 });

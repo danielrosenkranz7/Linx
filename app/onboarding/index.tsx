@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: '#16a34a',
     padding: 18,
-    borderRadius: 14,
+    borderRadius: 12,
   },
   nextButtonText: {
     fontSize: 18,

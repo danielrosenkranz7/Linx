@@ -18,6 +18,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
 
 export default function ProfileScreen() {
@@ -30,6 +31,7 @@ export default function ProfileScreen() {
   const [loading, setLoading] = useState(true);
   const [followersCount, setFollowersCount] = useState(0);
   const [followingCount, setFollowingCount] = useState(0);
+  const [taggedCount, setTaggedCount] = useState(0);
 
   // Find Friends Modal state
   const [showFindFriends, setShowFindFriends] = useState(false);
@@ -209,6 +211,28 @@ export default function ProfileScreen() {
         .order('created_at', { ascending: false });
 
       setBookmarkedCourses(bookmarksData || []);
+
+      // Count rounds where user is tagged as a partner
+      const { data: allRoundsWithPartners } = await supabase
+        .from('rounds')
+        .select('id, partners')
+        .not('partners', 'is', null)
+        .neq('user_id', user.id);
+
+      const taggedRoundsCount = (allRoundsWithPartners || []).filter(round => {
+        try {
+          const partners = typeof round.partners === 'string'
+            ? JSON.parse(round.partners)
+            : round.partners;
+          return Array.isArray(partners) && partners.some(
+            (p: any) => p.user_id === user.id
+          );
+        } catch {
+          return false;
+        }
+      }).length;
+
+      setTaggedCount(taggedRoundsCount);
 
     } catch (error) {
       console.error('Error loading profile:', error);
@@ -423,7 +447,9 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <Text style={styles.headerTitle}>
+          {profile?.username ? `@${profile.username}` : profile?.name || 'Profile'}
+        </Text>
         <TouchableOpacity onPress={() => supabase.auth.signOut()}>
           <Ionicons name="log-out-outline" size={24} color="#ef4444" />
         </TouchableOpacity>
@@ -507,7 +533,11 @@ export default function ProfileScreen() {
             {top3Courses.map((round, index) => {
               const medal = getMedalIcon(index);
               return (
-                <View key={round.id} style={styles.top3Card}>
+                <TouchableOpacity
+                  key={round.id}
+                  style={styles.top3Card}
+                  onPress={() => router.push(`/course/${round.courses.id}`)}
+                >
                   <View style={styles.medalContainer}>
                     <Ionicons name={medal.icon as any} size={28} color={medal.color} />
                   </View>
@@ -518,7 +548,7 @@ export default function ProfileScreen() {
                   <View style={styles.top3Rating}>
                     <Text style={styles.top3RatingText}>{round.rating.toFixed(1)}</Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -599,6 +629,27 @@ export default function ProfileScreen() {
               })}
             </ScrollView>
           )}
+        </View>
+
+        {/* Tagged Section */}
+        <View style={styles.taggedSectionContainer}>
+          <Text style={styles.sectionTitle}>Tagged In</Text>
+          <TouchableOpacity
+            style={styles.taggedCard}
+            onPress={() => router.push('/tagged')}
+          >
+            <View style={styles.taggedLeft}>
+              <View style={styles.taggedIconContainer}>
+                <Ionicons name="pricetag" size={20} color="#16a34a" />
+              </View>
+              <Text style={styles.taggedText}>
+                {taggedCount === 0
+                  ? 'No tags yet'
+                  : `${taggedCount} ${taggedCount === 1 ? 'round' : 'rounds'} from friends`}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+          </TouchableOpacity>
         </View>
 
         {/* Rounds Section */}
@@ -691,31 +742,34 @@ export default function ProfileScreen() {
         animationType="slide"
         onRequestClose={closeFindFriends}
       >
-        <KeyboardAvoidingView
-          style={styles.modalContainer}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          {/* Modal Header */}
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Find Friends</Text>
-            <TouchableOpacity onPress={closeFindFriends} style={styles.modalClose}>
-              <Ionicons name="close" size={28} color="#1a1a1a" />
-            </TouchableOpacity>
-          </View>
+        <SafeAreaView style={styles.modalContainer}>
+          <KeyboardAvoidingView
+            style={styles.modalKeyboardView}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={0}
+          >
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <View style={styles.modalSpacer} />
+              <Text style={styles.modalTitle}>Find Friends</Text>
+              <TouchableOpacity onPress={closeFindFriends} style={styles.modalClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Ionicons name="close" size={28} color="#1a1a1a" />
+              </TouchableOpacity>
+            </View>
 
-          {/* Search Bar */}
-          <View style={styles.searchContainer}>
-            <Ionicons name="search" size={20} color="#9ca3af" style={styles.searchIcon} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search for golfers..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoFocus
-              placeholderTextColor="#9ca3af"
-            />
-            {isSearching && <ActivityIndicator size="small" color="#16a34a" />}
-          </View>
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={20} color="#9ca3af" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search for golfers..."
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoFocus
+                placeholderTextColor="#9ca3af"
+              />
+              {isSearching && <ActivityIndicator size="small" color="#16a34a" />}
+            </View>
 
           {/* Search Results */}
           <ScrollView
@@ -783,7 +837,8 @@ export default function ProfileScreen() {
                 );
               })}
           </ScrollView>
-        </KeyboardAvoidingView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
     </View>
   );
@@ -816,8 +871,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb',
   },
   headerTitle: {
-    fontSize: 28,
-    fontWeight: '700',
+    fontSize: 18,
+    fontWeight: '600',
     color: '#1a1a1a',
     fontFamily: 'Inter',
   },
@@ -905,7 +960,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#16a34a',
   },
@@ -1133,6 +1188,39 @@ const styles = StyleSheet.create({
   removeBookmarkButton: {
     alignSelf: 'flex-end',
   },
+  taggedSectionContainer: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  taggedCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  taggedLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  taggedIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#f0fdf4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  taggedText: {
+    fontSize: 15,
+    color: '#6b7280',
+    fontFamily: 'Inter',
+  },
   roundsSection: {
     padding: 20,
     paddingBottom: 100,
@@ -1250,27 +1338,36 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     backgroundColor: '#fff',
-    paddingTop: 60,
+  },
+  modalKeyboardView: {
+    flex: 1,
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 16,
+    justifyContent: 'space-between',
+    paddingTop: 20,
+    paddingBottom: 16,
+    paddingHorizontal: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
-    position: 'relative',
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: '#1a1a1a',
     fontFamily: 'Inter',
+    flex: 1,
+    textAlign: 'center',
   },
   modalClose: {
-    position: 'absolute',
-    right: 16,
-    padding: 4,
+    padding: 8,
+    width: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalSpacer: {
+    width: 44,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -1365,7 +1462,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 16,
+    borderRadius: 12,
     backgroundColor: '#16a34a',
   },
   searchFollowingButton: {

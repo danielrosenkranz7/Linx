@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Image, Modal, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { getRatingColor } from '../../lib/colors';
 import { supabase } from '../../lib/supabase';
 
 export default function CourseDetailScreen() {
@@ -10,20 +11,22 @@ export default function CourseDetailScreen() {
   const [course, setCourse] = useState<any>(null);
   const [rounds, setRounds] = useState<any[]>([]);
   const [relevantRounds, setRelevantRounds] = useState<any[]>([]);
-  const [userRound, setUserRound] = useState<any>(null);
+  const [userRounds, setUserRounds] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [currentUserId, setCurrentUserId] = useState('');
   const [selectedPhoto, setSelectedPhoto] = useState<string | null>(null);
   const [allPhotos, setAllPhotos] = useState<string[]>([]);
+  const [courseExperts, setCourseExperts] = useState<Array<{
+    user: { id: string; name: string; username: string; avatar_url?: string };
+    roundCount: number;
+  }>>([]);
 
   useEffect(() => {
     loadCourseDetails();
   }, [id]);
 
 const loadCourseDetails = async () => {
-    console.log('Loading course with ID:', id);
-    
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -37,9 +40,6 @@ const loadCourseDetails = async () => {
         .single();
 
     setCourse(courseData);
-      console.log('Course data:', courseData);
-
-      // Check if bookmarked
 
       // Check if bookmarked
       const { data: bookmarkData } = await supabase
@@ -62,11 +62,12 @@ const loadCourseDetails = async () => {
         .order('rating', { ascending: false });
 
     setRounds(roundsData || []);
-      console.log('Rounds data:', roundsData);
 
-      // Find current user's round for this course (most recent)
-      const myRound = roundsData?.find(r => r.user_id === user.id);
-      setUserRound(myRound || null);
+      // Find all current user's rounds for this course (sorted by date, most recent first)
+      const myRounds = (roundsData || [])
+        .filter(r => r.user_id === user.id)
+        .sort((a, b) => new Date(b.date_played).getTime() - new Date(a.date_played).getTime());
+      setUserRounds(myRounds);
 
       // Get users I follow
 
@@ -99,6 +100,41 @@ const loadCourseDetails = async () => {
       const showCount = Math.min(10, Math.max(5, 5 + friendReviews));
       setRelevantRounds(sorted.slice(0, showCount));
 
+      // Calculate course experts (most rounds this year)
+      const currentYear = new Date().getFullYear();
+      const yearStart = `${currentYear}-01-01`;
+
+      const { data: expertsData } = await supabase
+        .from('rounds')
+        .select(`
+          user_id,
+          user:profiles(id, name, username, avatar_url)
+        `)
+        .eq('course_id', id)
+        .gte('date_played', yearStart);
+
+      if (expertsData && expertsData.length > 0) {
+        // Count rounds per user
+        const userCounts = new Map<string, { user: any; count: number }>();
+
+        for (const round of expertsData) {
+          const existing = userCounts.get(round.user_id);
+          if (existing) {
+            existing.count++;
+          } else {
+            userCounts.set(round.user_id, { user: round.user, count: 1 });
+          }
+        }
+
+        // Sort by count and take top 5
+        const sortedExperts = Array.from(userCounts.values())
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 5)
+          .map(e => ({ user: e.user, roundCount: e.count }));
+
+        setCourseExperts(sortedExperts);
+      }
+
       // Collect all photos
       const photos = roundsData
         ?.filter(r => r.photos)
@@ -128,8 +164,8 @@ const loadCourseDetails = async () => {
         setCourse({ ...courseData, average_rating: avgRating, total_reviews: roundsData.length });
       }
 
-    } catch (error) {
-      console.error('Error loading course details:', error);
+    } catch {
+      // Error loading course details
     } finally {
       setLoading(false);
     }
@@ -150,8 +186,8 @@ const loadCourseDetails = async () => {
           .insert([{ user_id: currentUserId, course_id: id }]);
         setIsBookmarked(true);
       }
-    } catch (error) {
-      console.error('Error toggling bookmark:', error);
+    } catch {
+      // Bookmark toggle failed silently
     }
   };
 
@@ -166,34 +202,34 @@ const loadCourseDetails = async () => {
     });
   };
 
-  const handleEditRound = () => {
-    if (!userRound || !course) return;
+  const handleEditRound = (round: any) => {
+    if (!round || !course) return;
 
     // Parse photos
     let photos: string[] = [];
-    if (userRound.photos) {
+    if (round.photos) {
       try {
-        photos = typeof userRound.photos === 'string' ? JSON.parse(userRound.photos) : userRound.photos;
+        photos = typeof round.photos === 'string' ? JSON.parse(round.photos) : round.photos;
       } catch {
         photos = [];
       }
     }
 
-    // Navigate to edit round flow with existing data
+    // Navigate to edit round flow starting with date selection
     router.push({
-      pathname: '/edit-round/score',
+      pathname: '/edit-round/date-selection',
       params: {
-        roundId: userRound.id,
+        roundId: round.id,
         courseId: course.id,
         courseName: course.name,
         courseLocation: course.location,
-        score: userRound.score?.toString() || '',
-        holes: userRound.holes || '18',
-        notes: userRound.notes || '',
-        rating: userRound.rating?.toString() || '7.5',
+        score: round.score?.toString() || '',
+        holes: round.holes || '18',
+        notes: round.notes || '',
+        rating: round.rating?.toString() || '7.5',
         photos: JSON.stringify(photos),
-        partners: userRound.partners || '',
-        datePlayed: userRound.date_played || '',
+        partners: round.partners || '',
+        datePlayed: round.date_played || '',
       },
     });
   };
@@ -208,9 +244,23 @@ const loadCourseDetails = async () => {
       await Share.share({
         message: `Check out ${course?.name} on Linx! linx://course/${id}`,
       });
-    } catch (error) {
-      console.error('Error sharing:', error);
+    } catch {
+      // Share cancelled or failed
     }
+  };
+
+  const handleAddRound = () => {
+    if (!course) return;
+
+    // Skip course search and go directly to date selection
+    router.push({
+      pathname: '/add-round/date-selection',
+      params: {
+        courseId: course.id,
+        courseName: course.name,
+        courseLocation: course.location,
+      },
+    });
   };
 
   // Get 6 random photos for preview
@@ -236,8 +286,10 @@ const loadCourseDetails = async () => {
         >
           <Ionicons name="chevron-back" size={28} color="#1a1a1a" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Course</Text>
         <View style={styles.headerActions}>
+          <TouchableOpacity onPress={handleAddRound} style={styles.addRoundButton}>
+            <Ionicons name="add" size={22} color="#fff" />
+          </TouchableOpacity>
           <TouchableOpacity onPress={handleShare} style={styles.headerActionButton}>
             <Ionicons name="share-outline" size={24} color="#16a34a" />
           </TouchableOpacity>
@@ -300,36 +352,128 @@ const loadCourseDetails = async () => {
         )}
 
         {/* Your Rating */}
-        {userRound && (
-          <TouchableOpacity style={styles.yourRatingSection} onPress={handleEditRound}>
-            <View style={styles.yourRatingHeader}>
-              <Text style={styles.sectionTitle}>Your Rating</Text>
-              <View style={styles.editBadge}>
-                <Ionicons name="create-outline" size={16} color="#16a34a" />
-                <Text style={styles.editBadgeText}>Edit</Text>
+        {userRounds.length > 0 && (
+          <View style={styles.yourRatingSection}>
+            <Text style={styles.yourRatingSectionTitle}>Your Rating</Text>
+            <View style={styles.yourRatingContent}>
+              {/* Fixed Rating Box */}
+              <View style={[
+                styles.yourRatingBox,
+                {
+                  backgroundColor: getRatingColor(userRounds[0].rating).background,
+                  borderColor: getRatingColor(userRounds[0].rating).border,
+                }
+              ]}>
+                <Ionicons name="golf" size={20} color="#4b5563" />
+                <Text style={styles.yourRatingNumber}>{userRounds[0].rating.toFixed(1)}</Text>
               </View>
+
+              {/* Horizontal Scroll of Rounds */}
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.roundsScrollContent}
+              >
+                {userRounds.map((round) => {
+                  // Parse partners
+                  let partners: any[] = [];
+                  if (round.partners) {
+                    try {
+                      partners = typeof round.partners === 'string' ? JSON.parse(round.partners) : round.partners;
+                    } catch {}
+                  }
+
+                  // Parse photos
+                  let photos: string[] = [];
+                  if (round.photos) {
+                    try {
+                      photos = typeof round.photos === 'string' ? JSON.parse(round.photos) : round.photos;
+                    } catch {}
+                  }
+
+                  return (
+                    <TouchableOpacity
+                      key={round.id}
+                      style={styles.yourRoundCard}
+                      onPress={() => handleEditRound(round)}
+                    >
+                      <Text style={styles.yourRoundDate}>{formatDate(round.date_played)}</Text>
+
+                      {round.score && (
+                        <Text style={styles.yourRoundScore}>Shot {round.score}</Text>
+                      )}
+
+                      {/* Partners preview */}
+                      {partners.length > 0 && (
+                        <View style={styles.yourRoundPartners}>
+                          {partners.slice(0, 3).map((partner, idx) => (
+                            <View key={idx} style={styles.yourRoundPartnerBubble}>
+                              <Text style={styles.yourRoundPartnerText}>
+                                {partner.name?.[0]?.toUpperCase() || '?'}
+                              </Text>
+                            </View>
+                          ))}
+                          {partners.length > 3 && (
+                            <Text style={styles.yourRoundMorePartners}>+{partners.length - 3}</Text>
+                          )}
+                        </View>
+                      )}
+
+                      {/* Photo preview */}
+                      {photos.length > 0 && (
+                        <View style={styles.yourRoundPhotos}>
+                          <Ionicons name="image" size={12} color="#6b7280" />
+                          <Text style={styles.yourRoundPhotoCount}>{photos.length}</Text>
+                        </View>
+                      )}
+
+                      <Ionicons name="chevron-forward" size={14} color="#9ca3af" style={styles.yourRoundChevron} />
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
             </View>
-            <View style={styles.yourRatingCard}>
-              <View style={styles.yourRatingLeft}>
-                <View style={styles.yourRatingBox}>
-                  <Ionicons name="golf" size={24} color="#16a34a" />
-                  <Text style={styles.yourRatingNumber}>{userRound.rating.toFixed(1)}</Text>
-                </View>
-              </View>
-              <View style={styles.yourRatingInfo}>
-                {userRound.score && (
-                  <Text style={styles.yourRatingScore}>
-                    Shot {userRound.score} • {userRound.holes === 'front9' ? 'Front 9' : userRound.holes === 'back9' ? 'Back 9' : '18 holes'}
-                  </Text>
-                )}
-                <Text style={styles.yourRatingDate}>{formatDate(userRound.date_played)}</Text>
-                {userRound.notes && (
-                  <Text style={styles.yourRatingNotes} numberOfLines={2}>"{userRound.notes}"</Text>
-                )}
-              </View>
-              <Ionicons name="chevron-forward" size={24} color="#9ca3af" />
+          </View>
+        )}
+
+        {/* Course Experts */}
+        {courseExperts.length > 0 && (
+          <View style={styles.expertsSection}>
+            <View style={styles.expertsTitleRow}>
+              <Ionicons name="trophy" size={14} color="#f59e0b" />
+              <Text style={styles.expertsTitle}>Course Experts ({new Date().getFullYear()})</Text>
             </View>
-          </TouchableOpacity>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.expertsScrollContent}
+            >
+              {courseExperts.map((expert, index) => (
+                <TouchableOpacity
+                  key={expert.user.id}
+                  style={styles.expertItem}
+                  onPress={() => handleUserPress(expert.user.id)}
+                >
+                  {index === 0 && (
+                    <View style={styles.expertTrophyBadge}>
+                      <Ionicons name="trophy" size={10} color="#f59e0b" />
+                    </View>
+                  )}
+                  {expert.user.avatar_url ? (
+                    <Image source={{ uri: expert.user.avatar_url }} style={styles.expertAvatar} />
+                  ) : (
+                    <View style={styles.expertAvatarPlaceholder}>
+                      <Text style={styles.expertAvatarText}>
+                        {expert.user.name?.[0]?.toUpperCase() || '?'}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={styles.expertName} numberOfLines={1}>{expert.user.name?.split(' ')[0]}</Text>
+                  <Text style={styles.expertRounds}>{expert.roundCount}x</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
         )}
 
         {/* Reviews */}
@@ -355,8 +499,14 @@ const loadCourseDetails = async () => {
                   <Text style={styles.reviewUserName}>{round.user.name}</Text>
                   <Text style={styles.reviewDate}>{formatDate(round.date_played)}</Text>
                 </View>
-                <View style={styles.reviewRating}>
-                  <Ionicons name="golf" size={16} color="#16a34a" />
+                <View style={[
+                  styles.reviewRating,
+                  {
+                    backgroundColor: getRatingColor(round.rating).background,
+                    borderColor: getRatingColor(round.rating).border,
+                  }
+                ]}>
+                  <Ionicons name="golf" size={16} color="#4b5563" />
                   <Text style={styles.reviewRatingText}>{round.rating.toFixed(1)}</Text>
                 </View>
               </TouchableOpacity>
@@ -458,20 +608,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingTop: 60,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    paddingBottom: 12,
   },
   backButton: {
     padding: 4,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1a1a1a',
-    fontFamily: 'Inter',
   },
   headerActions: {
     flexDirection: 'row',
@@ -480,6 +622,14 @@ const styles = StyleSheet.create({
   },
   headerActionButton: {
     padding: 4,
+  },
+  addRoundButton: {
+    backgroundColor: '#16a34a',
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   content: {
     flex: 1,
@@ -518,87 +668,181 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontFamily: 'Inter',
   },
+  expertsSection: {
+    paddingVertical: 12,
+    paddingLeft: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  expertsTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+  },
+  expertsTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#92400e',
+    fontFamily: 'Inter',
+  },
+  expertsScrollContent: {
+    paddingRight: 20,
+    gap: 12,
+  },
+  expertItem: {
+    alignItems: 'center',
+    position: 'relative',
+  },
+  expertTrophyBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    zIndex: 1,
+    backgroundColor: '#fffbeb',
+    borderRadius: 8,
+    padding: 2,
+  },
+  expertAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    marginBottom: 4,
+  },
+  expertAvatarPlaceholder: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#16a34a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  expertAvatarText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
+    fontFamily: 'Inter',
+  },
+  expertName: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    fontFamily: 'Inter',
+    maxWidth: 50,
+    textAlign: 'center',
+  },
+  expertRounds: {
+    fontSize: 10,
+    color: '#6b7280',
+    fontFamily: 'Inter',
+  },
   photoSection: {
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
   },
   yourRatingSection: {
-    padding: 20,
+    paddingVertical: 12,
+    paddingLeft: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
     backgroundColor: '#f0fdf4',
   },
-  yourRatingHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  editBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#fff',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#16a34a',
-  },
-  editBadgeText: {
-    fontSize: 13,
+  yourRatingSectionTitle: {
+    fontSize: 14,
     fontWeight: '600',
     color: '#16a34a',
+    marginBottom: 8,
     fontFamily: 'Inter',
   },
-  yourRatingCard: {
+  yourRatingContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#86efac',
-  },
-  yourRatingLeft: {
-    marginRight: 16,
   },
   yourRatingBox: {
     alignItems: 'center',
-    backgroundColor: '#f0fdf4',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 12,
+    borderWidth: 1,
+    marginRight: 12,
   },
   yourRatingNumber: {
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: '700',
-    color: '#16a34a',
+    color: '#4b5563',
     fontFamily: 'Inter',
-    marginTop: 4,
+    marginTop: 2,
   },
-  yourRatingInfo: {
-    flex: 1,
+  roundsScrollContent: {
+    paddingRight: 20,
+    gap: 10,
   },
-  yourRatingScore: {
-    fontSize: 15,
+  yourRoundCard: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#86efac',
+    minWidth: 100,
+  },
+  yourRoundDate: {
+    fontSize: 12,
     fontWeight: '600',
     color: '#1a1a1a',
     fontFamily: 'Inter',
     marginBottom: 4,
   },
-  yourRatingDate: {
-    fontSize: 13,
-    color: '#6b7280',
+  yourRoundScore: {
+    fontSize: 11,
+    color: '#16a34a',
+    fontWeight: '600',
     fontFamily: 'Inter',
     marginBottom: 4,
   },
-  yourRatingNotes: {
-    fontSize: 14,
-    color: '#4b5563',
-    fontStyle: 'italic',
+  yourRoundPartners: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  yourRoundPartnerBubble: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#e5e7eb',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: -4,
+    borderWidth: 1,
+    borderColor: '#fff',
+  },
+  yourRoundPartnerText: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: '#6b7280',
+  },
+  yourRoundMorePartners: {
+    fontSize: 10,
+    color: '#6b7280',
+    marginLeft: 6,
     fontFamily: 'Inter',
+  },
+  yourRoundPhotos: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  yourRoundPhotoCount: {
+    fontSize: 10,
+    color: '#6b7280',
+    fontFamily: 'Inter',
+  },
+  yourRoundChevron: {
+    position: 'absolute',
+    right: 6,
+    top: 10,
   },
   sectionTitle: {
     fontSize: 18,
@@ -615,7 +859,7 @@ const styles = StyleSheet.create({
   photoThumbnail: {
     width: '31.5%',
     aspectRatio: 1,
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
   },
   photoImage: {
@@ -688,15 +932,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: '#f0fdf4',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
+    borderWidth: 1,
   },
   reviewRatingText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#16a34a',
+    color: '#4b5563',
     fontFamily: 'Inter',
   },
   reviewScore: {
@@ -719,7 +963,7 @@ const styles = StyleSheet.create({
   reviewPhotoThumbnail: {
     width: 80,
     height: 80,
-    borderRadius: 8,
+    borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -734,7 +978,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
+    borderRadius: 12,
   },
   reviewPhotoOverlayText: {
     color: '#fff',

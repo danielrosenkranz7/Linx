@@ -22,6 +22,15 @@ export default function OnboardingProfile() {
   const [saving, setSaving] = useState(false);
 
   const handleContinue = async () => {
+    // Validate handicap if provided
+    if (handicap) {
+      const handicapNum = parseFloat(handicap);
+      if (isNaN(handicapNum) || handicapNum < 0 || handicapNum > 54) {
+        toast.error('Handicap must be between 0 and 54');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -60,8 +69,7 @@ export default function OnboardingProfile() {
       if (error) throw error;
 
       router.push('/onboarding/home-course');
-    } catch (error) {
-      console.error('Error updating profile:', error);
+    } catch {
       toast.error('Failed to save profile');
     } finally {
       setSaving(false);
@@ -299,7 +307,7 @@ const styles = StyleSheet.create({
     gap: 8,
     backgroundColor: '#16a34a',
     padding: 18,
-    borderRadius: 14,
+    borderRadius: 12,
   },
   continueButtonDisabled: {
     opacity: 0.6,

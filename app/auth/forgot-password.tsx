@@ -18,6 +18,7 @@ export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const router = useRouter();
 
   const handleResetPassword = async () => {
@@ -64,6 +65,7 @@ export default function ForgotPasswordScreen() {
           <TouchableOpacity
             style={styles.button}
             onPress={() => router.replace('/auth/login')}
+            activeOpacity={0.8}
           >
             <Text style={styles.buttonText}>Back to Login</Text>
           </TouchableOpacity>
@@ -95,19 +97,23 @@ export default function ForgotPasswordScreen() {
         </Text>
 
         <TextInput
-          style={styles.input}
+          style={[styles.input, isFocused && styles.inputFocused]}
           placeholder="Email"
+          placeholderTextColor="#9ca3af"
           value={email}
           onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
           autoFocus
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
         />
 
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}
           onPress={handleResetPassword}
           disabled={loading}
+          activeOpacity={0.8}
         >
           <Text style={styles.buttonText}>
             {loading ? 'Sending...' : 'Send Reset Link'}
@@ -130,7 +136,7 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     justifyContent: 'center',
-    padding: 20,
+    padding: 24,
   },
   backButton: {
     position: 'absolute',
@@ -161,16 +167,22 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'Inter',
     backgroundColor: '#f9fafb',
+    color: '#1a1a1a',
+  },
+  inputFocused: {
+    borderColor: '#16a34a',
+    borderWidth: 2,
+    backgroundColor: '#fff',
   },
   button: {
     backgroundColor: '#16a34a',
-    padding: 16,
+    padding: 18,
     borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 24,
   },
   buttonDisabled: {
-    opacity: 0.5,
+    backgroundColor: '#86efac',
   },
   buttonText: {
     color: '#fff',

@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useDebounce } from '../hooks/useDebounce';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
 
@@ -21,15 +22,24 @@ export default function EditProfileScreen() {
   const [courseSearchQuery, setCourseSearchQuery] = useState('');
   const [courseSearchResults, setCourseSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [showDangerZone, setShowDangerZone] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deleting, setDeleting] = useState(false);
 
   const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const debouncedCourseQuery = useDebounce(courseSearchQuery, 300);
 
   useEffect(() => {
     loadProfile();
   }, []);
+
+  // Trigger course search when debounced query changes
+  useEffect(() => {
+    if (showCourseSearch) {
+      searchCourses(debouncedCourseQuery);
+    }
+  }, [debouncedCourseQuery]);
 
   const loadProfile = async () => {
     try {
@@ -62,8 +72,8 @@ export default function EditProfileScreen() {
           }
         }
       }
-    } catch (error) {
-      console.error('Error loading profile:', error);
+    } catch {
+      // Profile load error - will show empty form
     } finally {
       setLoading(false);
     }
@@ -105,8 +115,8 @@ export default function EditProfileScreen() {
         }));
         setCourseSearchResults(courses);
       }
-    } catch (error) {
-      console.error('Search error:', error);
+    } catch {
+      // Search failed silently
     } finally {
       setIsSearching(false);
     }
@@ -142,7 +152,6 @@ export default function EditProfileScreen() {
           .single();
 
         if (error) {
-          console.error('Error creating course:', error);
           Alert.alert('Error', 'Failed to add course.');
           return;
         }
@@ -155,12 +164,21 @@ export default function EditProfileScreen() {
       setShowCourseSearch(false);
       setCourseSearchQuery('');
       setCourseSearchResults([]);
-    } catch (error) {
-      console.error('Error selecting course:', error);
+    } catch {
+      // Course selection failed silently
     }
   };
 
   const handleSave = async () => {
+    // Validate handicap if provided
+    if (handicap) {
+      const handicapNum = parseFloat(handicap);
+      if (isNaN(handicapNum) || handicapNum < 0 || handicapNum > 54) {
+        toast.error('Handicap must be between 0 and 54');
+        return;
+      }
+    }
+
     setSaving(true);
 
     try {
@@ -198,7 +216,6 @@ export default function EditProfileScreen() {
         .upsert(updates);
 
       if (error) {
-        console.error('Error updating profile:', error);
         Alert.alert('Error', 'Failed to update profile. Please try again.');
       } else {
         Alert.alert('Success', 'Profile updated!', [
@@ -208,8 +225,7 @@ export default function EditProfileScreen() {
           },
         ]);
       }
-    } catch (error) {
-      console.error('Unexpected error:', error);
+    } catch {
       Alert.alert('Error', 'Something went wrong. Please try again.');
     } finally {
       setSaving(false);
@@ -235,7 +251,6 @@ export default function EditProfileScreen() {
         .eq('id', user.id);
 
       if (profileError) {
-        console.error('Error deleting profile:', profileError);
         throw profileError;
       }
 
@@ -244,8 +259,7 @@ export default function EditProfileScreen() {
       await supabase.auth.signOut();
 
       toast.success('Account deleted');
-    } catch (error) {
-      console.error('Error deleting account:', error);
+    } catch {
       toast.error('Failed to delete account');
       setDeleting(false);
     }
@@ -362,19 +376,63 @@ export default function EditProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Danger Zone */}
-        <View style={styles.dangerZone}>
-          <Text style={styles.dangerZoneTitle}>Danger Zone</Text>
+        {/* Legal Section */}
+        <View style={styles.legalSection}>
+          <Text style={styles.legalTitle}>Legal</Text>
           <TouchableOpacity
-            style={styles.deleteAccountButton}
-            onPress={() => setShowDeleteConfirm(true)}
+            style={styles.legalItem}
+            onPress={() => Linking.openURL('https://danielrosenkranz.github.io/Linx/terms-of-service.html')}
           >
-            <Ionicons name="trash-outline" size={20} color="#ef4444" />
-            <Text style={styles.deleteAccountButtonText}>Delete Account</Text>
+            <View style={styles.legalItemLeft}>
+              <Ionicons name="document-text-outline" size={20} color="#6b7280" />
+              <Text style={styles.legalItemText}>Terms of Service</Text>
+            </View>
+            <Ionicons name="open-outline" size={18} color="#9ca3af" />
           </TouchableOpacity>
-          <Text style={styles.dangerZoneHint}>
-            This will permanently delete your account and all your data.
-          </Text>
+          <TouchableOpacity
+            style={[styles.legalItem, { marginTop: 10 }]}
+            onPress={() => Linking.openURL('https://danielrosenkranz.github.io/Linx/privacy-policy.html')}
+          >
+            <View style={styles.legalItemLeft}>
+              <Ionicons name="shield-checkmark-outline" size={20} color="#6b7280" />
+              <Text style={styles.legalItemText}>Privacy Policy</Text>
+            </View>
+            <Ionicons name="open-outline" size={18} color="#9ca3af" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Account Settings (collapsed by default) */}
+        <View style={styles.accountSettingsSection}>
+          <TouchableOpacity
+            style={styles.accountSettingsHeader}
+            onPress={() => setShowDangerZone(!showDangerZone)}
+          >
+            <View style={styles.accountSettingsLeft}>
+              <Ionicons name="settings-outline" size={20} color="#6b7280" />
+              <Text style={styles.accountSettingsTitle}>Account Settings</Text>
+            </View>
+            <Ionicons
+              name={showDangerZone ? 'chevron-up' : 'chevron-down'}
+              size={20}
+              color="#9ca3af"
+            />
+          </TouchableOpacity>
+
+          {showDangerZone && (
+            <View style={styles.dangerZone}>
+              <Text style={styles.dangerZoneTitle}>Danger Zone</Text>
+              <TouchableOpacity
+                style={styles.deleteAccountButton}
+                onPress={() => setShowDeleteConfirm(true)}
+              >
+                <Ionicons name="trash-outline" size={20} color="#ef4444" />
+                <Text style={styles.deleteAccountButtonText}>Delete Account</Text>
+              </TouchableOpacity>
+              <Text style={styles.dangerZoneHint}>
+                This will permanently delete your account and all your data.
+              </Text>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -416,10 +474,7 @@ export default function EditProfileScreen() {
               style={styles.modalSearchInput}
               placeholder="Search for a golf course..."
               value={courseSearchQuery}
-              onChangeText={(text) => {
-                setCourseSearchQuery(text);
-                searchCourses(text);
-              }}
+              onChangeText={setCourseSearchQuery}
               autoFocus
             />
           </View>
@@ -708,15 +763,80 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     fontFamily: 'Inter',
   },
-  // Danger Zone styles
-  dangerZone: {
+  // Legal Section styles
+  legalSection: {
     marginTop: 20,
     paddingTop: 24,
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
   },
-  dangerZoneTitle: {
+  legalTitle: {
     fontSize: 16,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    marginBottom: 12,
+    fontFamily: 'Inter',
+  },
+  legalItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  legalItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  legalItemText: {
+    fontSize: 16,
+    color: '#1a1a1a',
+    fontFamily: 'Inter',
+  },
+  // Account Settings styles
+  accountSettingsSection: {
+    marginTop: 20,
+    paddingTop: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    marginBottom: 40,
+  },
+  accountSettingsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    backgroundColor: '#f9fafb',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  accountSettingsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  accountSettingsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6b7280',
+    fontFamily: 'Inter',
+  },
+  // Danger Zone styles
+  dangerZone: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#fef2f2',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#fecaca',
+  },
+  dangerZoneTitle: {
+    fontSize: 14,
     fontWeight: '600',
     color: '#ef4444',
     marginBottom: 12,
@@ -726,11 +846,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    padding: 16,
-    backgroundColor: '#fef2f2',
+    padding: 14,
+    backgroundColor: '#fff',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#fecaca',
+    borderColor: '#ef4444',
   },
   deleteAccountButtonText: {
     fontSize: 16,
@@ -754,7 +874,7 @@ const styles = StyleSheet.create({
   },
   deleteModalContent: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 24,
     padding: 24,
     width: '100%',
     maxWidth: 400,
@@ -792,7 +912,7 @@ const styles = StyleSheet.create({
   deleteModalInput: {
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 14,
     fontSize: 16,
     fontFamily: 'Inter',
@@ -806,7 +926,7 @@ const styles = StyleSheet.create({
   deleteModalCancelButton: {
     flex: 1,
     padding: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     backgroundColor: '#f3f4f6',
     alignItems: 'center',
   },
@@ -819,7 +939,7 @@ const styles = StyleSheet.create({
   deleteModalConfirmButton: {
     flex: 1,
     padding: 14,
-    borderRadius: 10,
+    borderRadius: 12,
     backgroundColor: '#ef4444',
     alignItems: 'center',
   },

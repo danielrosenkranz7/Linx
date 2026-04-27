@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { toast } from '../../lib/toast';
 
 export default function ScoreScreen() {
   const router = useRouter();
@@ -64,6 +65,19 @@ export default function ScoreScreen() {
   };
 
   const handleContinue = () => {
+    // Validate score if provided
+    if (score) {
+      const scoreNum = parseInt(score, 10);
+      const isNineHoles = holes === 'front9' || holes === 'back9';
+      const minScore = isNineHoles ? 9 : 18;  // At least 1 per hole
+      const maxScore = isNineHoles ? 99 : 199; // Reasonable max
+
+      if (isNaN(scoreNum) || scoreNum < minScore || scoreNum > maxScore) {
+        toast.error(`Score must be between ${minScore} and ${maxScore} for ${isNineHoles ? '9' : '18'} holes`);
+        return;
+      }
+    }
+
     router.push({
       pathname: '/add-round/rating',
       params: {
@@ -290,7 +304,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 12,
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#e5e7eb',
     alignItems: 'center',
@@ -322,7 +336,7 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 14,
     backgroundColor: '#f0fdf4',
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#86efac',
   },
@@ -351,7 +365,7 @@ const styles = StyleSheet.create({
   photo: {
     width: '100%',
     height: '100%',
-    borderRadius: 8,
+    borderRadius: 12,
   },
   removeButton: {
     position: 'absolute',
@@ -370,7 +384,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#f9fafb',
     borderWidth: 1,
     borderColor: '#e5e7eb',
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 14,
     fontSize: 15,
     fontFamily: 'Inter',

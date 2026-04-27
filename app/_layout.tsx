@@ -12,6 +12,7 @@ SplashScreen.preventAutoHideAsync();
 export default function RootLayout() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [onboardingChecked, setOnboardingChecked] = useState(false);
   const segments = useSegments();
   const router = useRouter();
 
@@ -36,6 +37,8 @@ export default function RootLayout() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      // Reset onboarding check when session changes (login/logout)
+      setOnboardingChecked(false);
     });
 
     return () => subscription.unsubscribe();
@@ -46,14 +49,17 @@ export default function RootLayout() {
 
     const inAuthGroup = segments[0] === 'auth';
     const inOnboarding = segments[0] === 'onboarding';
+    const inTabs = segments[0] === '(tabs)';
 
     if (!session && !inAuthGroup) {
+      // Not logged in - redirect to login
+      setOnboardingChecked(false);
       router.replace('/auth/login');
-    } else if (session && inAuthGroup) {
-      // Check if user needs onboarding
+    } else if (session && !onboardingChecked && (inAuthGroup || (!inOnboarding && !inTabs))) {
+      // Logged in but haven't checked onboarding yet - check now
       checkOnboarding();
     }
-  }, [session, segments, loading, fontsLoaded]);
+  }, [session, segments, loading, fontsLoaded, onboardingChecked]);
 
   const checkOnboarding = async () => {
     try {
@@ -66,6 +72,8 @@ export default function RootLayout() {
         .eq('id', user.id)
         .single();
 
+      setOnboardingChecked(true);
+
       if (profile?.onboarding_completed) {
         router.replace('/(tabs)');
       } else {
@@ -73,6 +81,7 @@ export default function RootLayout() {
       }
     } catch (error) {
       // If profile doesn't exist or error, go to onboarding
+      setOnboardingChecked(true);
       router.replace('/onboarding');
     }
   };

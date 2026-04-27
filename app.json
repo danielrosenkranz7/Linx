@@ -5,24 +5,33 @@
     "scheme": "linx",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
+      "image": "./assets/images/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,
+      "bundleIdentifier": "com.linx.golf",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Linx needs your location to show golf courses near you."
+        "NSLocationWhenInUseUsageDescription": "Linx needs your location to show golf courses near you.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
+      "package": "com.linx.golf",
       "config": {
         "googleMaps": {
           "apiKey": "${EXPO_PUBLIC_GOOGLE_MAPS_API_KEY}"
         }
-      }
+      },
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -37,6 +46,11 @@
           "locationWhenInUsePermission": "Linx needs your location to show golf courses near you."
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "05d9fd58-6334-42a2-84ce-759fb57a3f09"
+      }
+    }
   }
 }
