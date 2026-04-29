@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Image,
   Modal,
   RefreshControl,
   ScrollView,
@@ -15,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import FeedCard from '../../components/FeedCard';
+import LinxWordmark from '../../components/LinxWordmark';
 import { handleError } from '../../lib/errors';
 import { supabase } from '../../lib/supabase';
 
@@ -310,11 +310,7 @@ export default function HomeScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <Image
-            source={require('../../assets/images/icon.png')}
-            style={styles.headerLogo}
-            resizeMode="contain"
-          />
+          <LinxWordmark width={100} height={42} />
           <TouchableOpacity style={styles.searchButton} onPress={() => setShowSearch(true)}>
             <Ionicons name="search" size={24} color="#6b7280" />
           </TouchableOpacity>
@@ -330,11 +326,7 @@ export default function HomeScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Image
-          source={require('../../assets/images/icon.png')}
-          style={styles.headerLogo}
-          resizeMode="contain"
-        />
+        <LinxWordmark width={100} height={42} />
         <TouchableOpacity style={styles.searchButton} onPress={() => setShowSearch(true)}>
           <Ionicons name="search" size={24} color="#6b7280" />
         </TouchableOpacity>
@@ -548,10 +540,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#e5e7eb',
-  },
-  headerLogo: {
-    width: 48,
-    height: 48,
   },
   searchButton: {
     width: 44,
