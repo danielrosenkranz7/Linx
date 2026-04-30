@@ -62,6 +62,8 @@ export default function LoginScreen() {
           keyboardType="email-address"
           onFocus={() => setFocusedInput('email')}
           onBlur={() => setFocusedInput(null)}
+          accessibilityLabel="Email input"
+          accessibilityHint="Enter your email address"
         />
 
         <TextInput
@@ -76,11 +78,15 @@ export default function LoginScreen() {
           secureTextEntry
           onFocus={() => setFocusedInput('password')}
           onBlur={() => setFocusedInput(null)}
+          accessibilityLabel="Password input"
+          accessibilityHint="Enter your password"
         />
 
         <TouchableOpacity
           onPress={() => router.push('/auth/forgot-password')}
           style={styles.forgotPassword}
+          accessibilityLabel="Forgot password"
+          accessibilityRole="button"
         >
           <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
         </TouchableOpacity>
@@ -90,13 +96,19 @@ export default function LoginScreen() {
           onPress={handleLogin}
           disabled={loading}
           activeOpacity={0.8}
+          accessibilityLabel={loading ? 'Logging in' : 'Log in'}
+          accessibilityRole="button"
         >
           <Text style={styles.buttonText}>
             {loading ? 'Logging in...' : 'Log In'}
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => router.push('/auth/signup')}>
+        <TouchableOpacity
+          onPress={() => router.push('/auth/signup')}
+          accessibilityLabel="Go to sign up"
+          accessibilityRole="button"
+        >
           <Text style={styles.link}>Don't have an account? Sign up</Text>
         </TouchableOpacity>
       </View>

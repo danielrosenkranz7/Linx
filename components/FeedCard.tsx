@@ -234,10 +234,11 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
 
         if (error) throw error;
       }
-    } catch {
+    } catch (error) {
       // Revert on error
       setIsLiked(wasLiked);
       setLikesCount((prev: number) => wasLiked ? prev + 1 : Math.max(0, prev - 1));
+      toast.error('Failed to update like');
     }
   };
 
@@ -267,23 +268,28 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
 
         if (error) throw error;
       }
-    } catch {
+    } catch (error) {
       // Revert on error
       setIsBookmarked(wasBookmarked);
+      toast.error('Failed to update bookmark');
     }
   };
 
   const loadComments = async () => {
     setLoadingComments(true);
     try {
-      // Fetch comments with user info
-      const { data: commentsData } = await supabase
+      // Fetch comments with user info (limit to 50 most recent)
+      const { data: commentsData, error } = await supabase
         .from('comments')
         .select(`
           *,
           user:profiles!comments_user_id_fkey(id, name, username, avatar_url)
         `)
-        .eq('round_id', round.id);
+        .eq('round_id', round.id)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
 
       if (!commentsData || commentsData.length === 0) {
         setComments([]);
@@ -541,16 +547,18 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.userSection}
-          onPress={() => router.push(`/user/${round.user.id}`)}
+          onPress={() => round.user?.id && router.push(`/user/${round.user.id}`)}
+          accessibilityLabel={`View ${round.user?.name || 'user'}'s profile`}
+          accessibilityRole="button"
         >
-          {round.user.avatar_url ? (
+          {round.user?.avatar_url ? (
             <Image source={{ uri: round.user.avatar_url }} style={styles.avatar} />
           ) : (
             <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarText}>{round.user.name?.[0] || '?'}</Text>
+              <Text style={styles.avatarText}>{round.user?.name?.[0] || '?'}</Text>
             </View>
           )}
-          <Text style={styles.userName}>{round.user.name}</Text>
+          <Text style={styles.userName}>{round.user?.name || 'Anonymous'}</Text>
         </TouchableOpacity>
 
         {/* Partner Initials */}
@@ -587,12 +595,14 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
       {/* Course Info */}
       <TouchableOpacity
         style={styles.courseSection}
-        onPress={() => router.push(`/course/${round.course.id}`)}
+        onPress={() => round.course?.id && router.push(`/course/${round.course.id}`)}
+        accessibilityLabel={`View ${round.course?.name || 'course'} details`}
+        accessibilityRole="button"
       >
-        <Text style={styles.courseName}>{round.course.name}</Text>
+        <Text style={styles.courseName}>{round.course?.name || 'Unknown Course'}</Text>
         <Text style={styles.courseLocation}>
           <Ionicons name="location" size={13} color="#6b7280" />
-          {' '}{round.course.location}
+          {' '}{round.course?.location || 'Unknown Location'}
         </Text>
       </TouchableOpacity>
 

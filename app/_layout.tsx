@@ -4,6 +4,7 @@ import * as Linking from 'expo-linking';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, useState } from 'react';
+import { ErrorBoundary } from '../components/ErrorBoundary';
 import { supabase } from '../lib/supabase';
 import { ToastProvider } from '../lib/toast';
 
@@ -91,18 +92,32 @@ export default function RootLayout() {
     if (loading || !fontsLoaded || !session) return;
 
     const handleDeepLink = (url: string) => {
-      const parsed = Linking.parse(url);
-      const path = parsed.path;
+      try {
+        const parsed = Linking.parse(url);
+        const path = parsed.path;
 
-      if (path?.startsWith('user/')) {
-        const userId = path.replace('user/', '');
-        router.push(`/user/${userId}`);
-      } else if (path?.startsWith('round/')) {
-        const roundId = path.replace('round/', '');
-        router.push(`/round/${roundId}`);
-      } else if (path?.startsWith('course/')) {
-        const courseId = path.replace('course/', '');
-        router.push(`/course/${courseId}`);
+        // Validate UUID format for IDs
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+        if (path?.startsWith('user/')) {
+          const userId = path.replace('user/', '');
+          if (uuidRegex.test(userId)) {
+            router.push(`/user/${userId}`);
+          }
+        } else if (path?.startsWith('round/')) {
+          const roundId = path.replace('round/', '');
+          if (uuidRegex.test(roundId)) {
+            router.push(`/round/${roundId}`);
+          }
+        } else if (path?.startsWith('course/')) {
+          const courseId = path.replace('course/', '');
+          if (uuidRegex.test(courseId)) {
+            router.push(`/course/${courseId}`);
+          }
+        }
+      } catch (error) {
+        // Silently ignore invalid deep links
+        console.error('Invalid deep link:', error);
       }
     };
 
@@ -124,13 +139,15 @@ export default function RootLayout() {
   }
 
   return (
-    <ToastProvider>
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="auth/login" />
-        <Stack.Screen name="auth/signup" />
-        <Stack.Screen name="onboarding" />
-        <Stack.Screen name="(tabs)" />
-      </Stack>
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="auth/login" />
+          <Stack.Screen name="auth/signup" />
+          <Stack.Screen name="onboarding" />
+          <Stack.Screen name="(tabs)" />
+        </Stack>
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }

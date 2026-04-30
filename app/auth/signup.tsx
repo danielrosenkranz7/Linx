@@ -4,6 +4,7 @@ import { Alert, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInp
 import { handleError } from '../../lib/errors';
 import { supabase } from '../../lib/supabase';
 import { toast } from '../../lib/toast';
+import { isValidEmail, sanitizeName, validatePassword } from '../../lib/validation';
 
 export default function SignupScreen() {
   const [email, setEmail] = useState('');
@@ -13,35 +14,34 @@ export default function SignupScreen() {
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const router = useRouter();
 
-  const isValidEmail = (email: string) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
   const handleSignup = async () => {
-    if (!email || !password || !name) {
+    const trimmedName = sanitizeName(name);
+    const trimmedEmail = email.trim().toLowerCase();
+
+    if (!trimmedEmail || !password || !trimmedName) {
       toast.error('Please fill in all fields');
       return;
     }
 
-    if (!isValidEmail(email.trim())) {
+    if (!isValidEmail(trimmedEmail)) {
       toast.error('Please enter a valid email address');
       return;
     }
 
-    if (password.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    const passwordValidation = validatePassword(password);
+    if (!passwordValidation.isValid) {
+      toast.error(passwordValidation.errors[0]);
       return;
     }
 
     setLoading(true);
     try {
       const { error } = await supabase.auth.signUp({
-        email: email.trim(),
+        email: trimmedEmail,
         password,
         options: {
           data: {
-            name: name.trim(),
+            name: trimmedName,
           },
         },
       });
@@ -85,6 +85,8 @@ export default function SignupScreen() {
           autoCapitalize="words"
           onFocus={() => setFocusedInput('name')}
           onBlur={() => setFocusedInput(null)}
+          accessibilityLabel="Full name input"
+          accessibilityHint="Enter your full name"
         />
 
         <TextInput
@@ -100,6 +102,8 @@ export default function SignupScreen() {
           keyboardType="email-address"
           onFocus={() => setFocusedInput('email')}
           onBlur={() => setFocusedInput(null)}
+          accessibilityLabel="Email input"
+          accessibilityHint="Enter your email address"
         />
 
         <TextInput
@@ -107,13 +111,15 @@ export default function SignupScreen() {
             styles.input,
             focusedInput === 'password' && styles.inputFocused,
           ]}
-          placeholder="Password (min 6 characters)"
+          placeholder="Password (min 8 characters)"
           placeholderTextColor="#9ca3af"
           value={password}
           onChangeText={setPassword}
           secureTextEntry
           onFocus={() => setFocusedInput('password')}
           onBlur={() => setFocusedInput(null)}
+          accessibilityLabel="Password input"
+          accessibilityHint="Enter a password with at least 8 characters, including uppercase, lowercase, and a number"
         />
 
         <TouchableOpacity
@@ -121,13 +127,19 @@ export default function SignupScreen() {
           onPress={handleSignup}
           disabled={loading}
           activeOpacity={0.8}
+          accessibilityLabel={loading ? 'Creating account' : 'Sign up'}
+          accessibilityRole="button"
         >
           <Text style={styles.buttonText}>
             {loading ? 'Creating Account...' : 'Sign Up'}
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          accessibilityLabel="Go to login"
+          accessibilityRole="button"
+        >
           <Text style={styles.link}>Already have an account? Log in</Text>
         </TouchableOpacity>
       </View>

@@ -91,7 +91,7 @@ export default function HomeScreen() {
         setSearchResults(data || []);
       }
     } catch (error) {
-      console.error('Search error:', error);
+      handleError(error, 'Search');
     } finally {
       setIsSearching(false);
     }
@@ -118,7 +118,7 @@ export default function HomeScreen() {
         setFollowingIds(prev => new Set(prev).add(userId));
       }
     } catch (error) {
-      console.error('Error toggling follow:', error);
+      handleError(error, 'Follow');
     }
   };
 
@@ -311,7 +311,12 @@ export default function HomeScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <LinxWordmark width={100} height={42} />
-          <TouchableOpacity style={styles.searchButton} onPress={() => setShowSearch(true)}>
+          <TouchableOpacity
+            style={styles.searchButton}
+            onPress={() => setShowSearch(true)}
+            accessibilityLabel="Search users and courses"
+            accessibilityRole="button"
+          >
             <Ionicons name="search" size={24} color="#6b7280" />
           </TouchableOpacity>
         </View>
@@ -327,7 +332,12 @@ export default function HomeScreen() {
       {/* Header */}
       <View style={styles.header}>
         <LinxWordmark width={100} height={42} />
-        <TouchableOpacity style={styles.searchButton} onPress={() => setShowSearch(true)}>
+        <TouchableOpacity
+          style={styles.searchButton}
+          onPress={() => setShowSearch(true)}
+          accessibilityLabel="Search users and courses"
+          accessibilityRole="button"
+        >
           <Ionicons name="search" size={24} color="#6b7280" />
         </TouchableOpacity>
       </View>

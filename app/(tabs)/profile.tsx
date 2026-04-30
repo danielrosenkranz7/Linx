@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import * as ImagePicker from 'expo-image-picker';
+import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
@@ -20,6 +21,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { supabase } from '../../lib/supabase';
+import { toast } from '../../lib/toast';
+import { validateImageFile } from '../../lib/validation';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -77,16 +80,18 @@ export default function ProfileScreen() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .neq('id', user.id)
         .or(`name.ilike.%${query}%,username.ilike.%${query}%`)
         .limit(20);
 
+      if (error) throw error;
       setSearchResults(data || []);
     } catch (error) {
       console.error('Search error:', error);
+      toast.error('Search failed. Please try again.');
     } finally {
       setIsSearching(false);
     }
@@ -122,6 +127,7 @@ export default function ProfileScreen() {
       }
     } catch (error) {
       console.error('Error toggling follow:', error);
+      toast.error('Failed to update follow status');
     }
   };
 
@@ -236,6 +242,7 @@ export default function ProfileScreen() {
 
     } catch (error) {
       console.error('Error loading profile:', error);
+      toast.error('Failed to load profile');
     } finally {
       setLoading(false);
     }
@@ -260,6 +267,14 @@ export default function ProfileScreen() {
     if (!result.canceled && result.assets[0].base64) {
       const imageUri = result.assets[0].uri;
       const base64 = result.assets[0].base64;
+      const fileSize = result.assets[0].fileSize;
+
+      // Validate image
+      const validation = validateImageFile(imageUri, fileSize, 5);
+      if (!validation.isValid) {
+        toast.error(validation.error || 'Invalid image');
+        return;
+      }
 
       // Show local preview immediately
       setProfile({
@@ -450,7 +465,11 @@ export default function ProfileScreen() {
         <Text style={styles.headerTitle}>
           {profile?.username ? `@${profile.username}` : profile?.name || 'Profile'}
         </Text>
-        <TouchableOpacity onPress={() => supabase.auth.signOut()}>
+        <TouchableOpacity
+          onPress={() => supabase.auth.signOut()}
+          accessibilityLabel="Sign out"
+          accessibilityRole="button"
+        >
           <Ionicons name="log-out-outline" size={24} color="#ef4444" />
         </TouchableOpacity>
       </View>
@@ -647,6 +666,47 @@ export default function ProfileScreen() {
                   ? 'No tags yet'
                   : `${taggedCount} ${taggedCount === 1 ? 'round' : 'rounds'} from friends`}
               </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+          </TouchableOpacity>
+        </View>
+
+        {/* Settings Section */}
+        <View style={styles.settingsSection}>
+          <Text style={styles.sectionTitle}>Settings</Text>
+          <TouchableOpacity
+            style={styles.settingsItem}
+            onPress={() => Linking.openURL('https://linxgolf.app/privacy-policy.html')}
+            accessibilityLabel="View privacy policy"
+            accessibilityRole="link"
+          >
+            <View style={styles.settingsItemLeft}>
+              <Ionicons name="shield-checkmark-outline" size={20} color="#6b7280" />
+              <Text style={styles.settingsItemText}>Privacy Policy</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.settingsItem}
+            onPress={() => Linking.openURL('https://linxgolf.app/terms-of-service.html')}
+            accessibilityLabel="View terms of service"
+            accessibilityRole="link"
+          >
+            <View style={styles.settingsItemLeft}>
+              <Ionicons name="document-text-outline" size={20} color="#6b7280" />
+              <Text style={styles.settingsItemText}>Terms of Service</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.settingsItem}
+            onPress={() => Linking.openURL('mailto:hello@linxgolf.app')}
+            accessibilityLabel="Contact support"
+            accessibilityRole="link"
+          >
+            <View style={styles.settingsItemLeft}>
+              <Ionicons name="mail-outline" size={20} color="#6b7280" />
+              <Text style={styles.settingsItemText}>Contact Support</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
           </TouchableOpacity>
@@ -1219,6 +1279,29 @@ const styles = StyleSheet.create({
   taggedText: {
     fontSize: 15,
     color: '#6b7280',
+    fontFamily: 'Inter',
+  },
+  settingsSection: {
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  settingsItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f4f6',
+  },
+  settingsItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  settingsItemText: {
+    fontSize: 16,
+    color: '#1a1a1a',
     fontFamily: 'Inter',
   },
   roundsSection: {
