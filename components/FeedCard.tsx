@@ -18,9 +18,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { getRatingColor } from '../lib/colors';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
+import ZoomableImage from './ZoomableImage';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
@@ -58,6 +60,7 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
   const [submittingComment, setSubmittingComment] = useState(false);
   const [showPhotoModal, setShowPhotoModal] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState(0);
+  const [isPhotoZoomed, setIsPhotoZoomed] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportReason, setReportReason] = useState('');
   const [reportDetails, setReportDetails] = useState('');
@@ -70,6 +73,7 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
   const scrollViewRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
   const [keyboardHeight] = useState(new Animated.Value(0));
+  const [, setTimeTick] = useState(0); // Forces re-render for timestamp updates
 
   // Handle keyboard for comments modal
   useEffect(() => {
@@ -206,6 +210,15 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
   useEffect(() => {
     setIsBookmarked(initialIsBookmarked);
   }, [initialIsBookmarked]);
+
+  // Update timestamp every 60 seconds for real-time display
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTimeTick(tick => tick + 1);
+    }, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, []);
 
   const handleLike = async () => {
     if (!currentUserId) return;
@@ -458,30 +471,70 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
     return date.toLocaleDateString();
   };
 
+  const handleDeleteRound = async () => {
+    Alert.alert(
+      'Delete Round',
+      'Are you sure you want to delete this round? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await supabase
+                .from('rounds')
+                .delete()
+                .eq('id', round.id);
+              toast.success('Round deleted');
+              onUpdate?.();
+            } catch {
+              toast.error('Failed to delete round');
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleMoreOptions = () => {
+    const isOwnRound = round.user_id === currentUserId;
+
     if (Platform.OS === 'ios') {
+      const options = isOwnRound
+        ? ['Cancel', 'Delete', 'Report']
+        : ['Cancel', 'Report'];
+      const destructiveButtonIndex = isOwnRound ? 1 : 1;
+
       ActionSheetIOS.showActionSheetWithOptions(
         {
-          options: ['Cancel', 'Report'],
+          options,
           cancelButtonIndex: 0,
-          destructiveButtonIndex: 1,
+          destructiveButtonIndex,
         },
         (buttonIndex) => {
-          if (buttonIndex === 1) {
-            setShowReportModal(true);
+          if (isOwnRound) {
+            if (buttonIndex === 1) handleDeleteRound();
+            if (buttonIndex === 2) setShowReportModal(true);
+          } else {
+            if (buttonIndex === 1) setShowReportModal(true);
           }
         }
       );
     } else {
       // Android fallback
-      Alert.alert(
-        'Options',
-        '',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Report', style: 'destructive', onPress: () => setShowReportModal(true) },
-        ]
-      );
+      const buttons = isOwnRound
+        ? [
+            { text: 'Cancel', style: 'cancel' as const },
+            { text: 'Delete', style: 'destructive' as const, onPress: handleDeleteRound },
+            { text: 'Report', onPress: () => setShowReportModal(true) },
+          ]
+        : [
+            { text: 'Cancel', style: 'cancel' as const },
+            { text: 'Report', style: 'destructive' as const, onPress: () => setShowReportModal(true) },
+          ];
+
+      Alert.alert('Options', '', buttons);
     }
   };
 
@@ -659,7 +712,7 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
       {/* Notes */}
       {round.notes && (
         <Text style={styles.notes} numberOfLines={3}>
-          "{round.notes}"
+          &quot;{round.notes}&quot;
         </Text>
       )}
 
@@ -839,6 +892,12 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
                 multiline
                 maxLength={500}
                 blurOnSubmit={false}
+                onFocus={() => {
+                  // Scroll to end when input is focused to ensure visibility
+                  setTimeout(() => {
+                    scrollViewRef.current?.scrollToEnd({ animated: true });
+                  }, 300);
+                }}
               />
               <TouchableOpacity
                 style={[
@@ -866,11 +925,14 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
         presentationStyle="fullScreen"
         onRequestClose={() => setShowPhotoModal(false)}
       >
-        <View style={styles.photoModalContainer}>
+        <GestureHandlerRootView style={styles.photoModalContainer}>
           {/* Header */}
           <View style={styles.photoModalHeader}>
             <TouchableOpacity
-              onPress={() => setShowPhotoModal(false)}
+              onPress={() => {
+                setIsPhotoZoomed(false);
+                setShowPhotoModal(false);
+              }}
               style={styles.photoModalClose}
             >
               <Ionicons name="close" size={28} color="#fff" />
@@ -886,18 +948,22 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
+            scrollEnabled={!isPhotoZoomed}
             onMomentumScrollEnd={(e) => {
               const index = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
               setSelectedPhotoIndex(index);
+              setIsPhotoZoomed(false);
             }}
             contentOffset={{ x: selectedPhotoIndex * SCREEN_WIDTH, y: 0 }}
           >
             {photos.map((photo, index) => (
               <View key={index} style={styles.photoSlide}>
-                <Image
-                  source={{ uri: photo }}
-                  style={styles.fullPhoto}
-                  resizeMode="contain"
+                <ZoomableImage
+                  uri={photo}
+                  width={SCREEN_WIDTH}
+                  height={SCREEN_WIDTH * 1.2}
+                  isActive={index === selectedPhotoIndex}
+                  onZoomChange={(zoomed) => setIsPhotoZoomed(zoomed)}
                 />
               </View>
             ))}
@@ -914,7 +980,10 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
               {photos.map((photo, index) => (
                 <TouchableOpacity
                   key={index}
-                  onPress={() => setSelectedPhotoIndex(index)}
+                  onPress={() => {
+                    setSelectedPhotoIndex(index);
+                    setIsPhotoZoomed(false);
+                  }}
                   style={[
                     styles.thumbnail,
                     selectedPhotoIndex === index && styles.thumbnailActive,
@@ -925,7 +994,7 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
               ))}
             </ScrollView>
           )}
-        </View>
+        </GestureHandlerRootView>
       </Modal>
 
       {/* Report Modal */}

@@ -109,7 +109,7 @@ export default function LoginScreen() {
           accessibilityLabel="Go to sign up"
           accessibilityRole="button"
         >
-          <Text style={styles.link}>Don't have an account? Sign up</Text>
+          <Text style={styles.link}>Don&apos;t have an account? Sign up</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

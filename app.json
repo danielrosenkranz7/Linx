@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.linx.golf",
+      "buildNumber": "3",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Linx needs your location to show golf courses near you.",
         "ITSAppUsesNonExemptEncryption": false
@@ -44,6 +45,13 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "Linx needs your location to show golf courses near you."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#16a34a"
         }
       ]
     ],

@@ -269,7 +269,6 @@ export default function MapScreen() {
 
       // Merge: prefer database courses (they have ratings), add OSM courses that aren't duplicates
       const mergedCourses: Course[] = [...dbCoursesProcessed];
-      const dbNames = new Set(dbCoursesProcessed.map(c => c.name.toLowerCase()));
 
       osmCourses.forEach(osmCourse => {
         // Check if this course is already in our database (by name similarity)
@@ -474,7 +473,7 @@ export default function MapScreen() {
         <View style={styles.legend}>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#16a34a' }]} />
-            <Text style={styles.legendText}>You've Played</Text>
+            <Text style={styles.legendText}>You&apos;ve Played</Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: '#3b82f6' }]} />

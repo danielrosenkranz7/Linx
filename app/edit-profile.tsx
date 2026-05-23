@@ -21,7 +21,6 @@ export default function EditProfileScreen() {
   const [showCourseSearch, setShowCourseSearch] = useState(false);
   const [courseSearchQuery, setCourseSearchQuery] = useState('');
   const [courseSearchResults, setCourseSearchResults] = useState<any[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
   const [showDangerZone, setShowDangerZone] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
@@ -85,8 +84,6 @@ export default function EditProfileScreen() {
       return;
     }
 
-    setIsSearching(true);
-
     try {
       const response = await fetch(
         `https://places.googleapis.com/v1/places:searchText`,
@@ -117,8 +114,6 @@ export default function EditProfileScreen() {
       }
     } catch {
       // Search failed silently
-    } finally {
-      setIsSearching(false);
     }
   };
 

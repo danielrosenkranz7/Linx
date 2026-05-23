@@ -193,7 +193,7 @@ export default function TaggedScreen() {
             <Ionicons name="people-outline" size={64} color="#d1d5db" />
             <Text style={styles.emptyTitle}>No tagged rounds yet</Text>
             <Text style={styles.emptySubtext}>
-              When friends tag you in their rounds, they'll appear here
+              When friends tag you in their rounds, they&apos;ll appear here
             </Text>
           </View>
         ) : (

@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import * as ImagePicker from 'expo-image-picker';
 import * as Linking from 'expo-linking';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -43,9 +43,12 @@ export default function ProfileScreen() {
   const [isSearching, setIsSearching] = useState(false);
   const [followingIds, setFollowingIds] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    loadProfile();
-  }, []);
+  // Reload profile when screen comes into focus (e.g., returning from edit-profile)
+  useFocusEffect(
+    useCallback(() => {
+      loadProfile();
+    }, [])
+  );
 
   // Search users when query changes
   useEffect(() => {
@@ -154,7 +157,7 @@ export default function ProfileScreen() {
         .from('profiles')
         .select(`
           *,
-          home_course:courses(name, location)
+          home_course:courses(id, name, location)
         `)
         .eq('id', user.id)
         .single();
@@ -425,21 +428,22 @@ export default function ProfileScreen() {
 
   const totalCourses = new Set(rounds.map(r => r.course_id)).size;
 
-  // Get top 3 unique courses (highest rating, most recent wins ties)
-  const getTop3Courses = () => {
+  // Get unique courses (best rating per course, for rankings)
+  const getUniqueRankings = () => {
     const seen = new Set<string>();
-    const top3: typeof rounds = [];
+    const unique: typeof rounds = [];
 
     for (const round of rounds) {
-      if (!seen.has(round.course_id) && top3.length < 3) {
+      if (!seen.has(round.course_id)) {
         seen.add(round.course_id);
-        top3.push(round);
+        unique.push(round);
       }
     }
-    return top3;
+    return unique;
   };
 
-  const top3Courses = getTop3Courses();
+  const uniqueRankings = getUniqueRankings();
+  const top3Courses = uniqueRankings.slice(0, 3);
 
   const getMedalIcon = (position: number) => {
     switch (position) {
@@ -577,7 +581,10 @@ export default function ProfileScreen() {
         <View style={styles.homeCourseSection}>
           <Text style={styles.sectionTitle}>Home Course</Text>
           {profile?.home_course ? (
-            <View style={styles.homeCourseCard}>
+            <TouchableOpacity
+              style={styles.homeCourseCard}
+              onPress={() => router.push(`/course/${profile.home_course.id}`)}
+            >
               <View style={styles.homeCourseInfo}>
                 <Text style={styles.homeCourseName}>{profile.home_course.name}</Text>
                 <Text style={styles.homeCourseLocation}>
@@ -585,10 +592,10 @@ export default function ProfileScreen() {
                   {' '}{profile.home_course.location}
                 </Text>
               </View>
-              <TouchableOpacity onPress={handleEditProfile}>
+              <TouchableOpacity onPress={(e) => { e.stopPropagation(); handleEditProfile(); }}>
                 <Ionicons name="create-outline" size={20} color="#6b7280" />
               </TouchableOpacity>
-            </View>
+            </TouchableOpacity>
           ) : (
             <TouchableOpacity style={styles.addHomeCourseButton} onPress={handleEditProfile}>
               <Ionicons name="add-circle-outline" size={20} color="#16a34a" />
@@ -742,7 +749,7 @@ export default function ProfileScreen() {
               </Text>
             </View>
           ) : (
-            rounds.map((round, index) => (
+            (isEditMode ? rounds : uniqueRankings).map((round, index) => (
               <View key={round.id} style={styles.roundCard}>
                 <View style={styles.roundRank}>
                   <Text style={styles.roundRankNumber}>#{index + 1}</Text>

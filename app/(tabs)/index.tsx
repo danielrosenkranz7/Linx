@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Modal,
   RefreshControl,
   ScrollView,
@@ -310,7 +311,7 @@ export default function HomeScreen() {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <LinxWordmark width={100} height={42} />
+          <LinxWordmark width={80} height={34} />
           <TouchableOpacity
             style={styles.searchButton}
             onPress={() => setShowSearch(true)}
@@ -331,7 +332,7 @@ export default function HomeScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <LinxWordmark width={100} height={42} />
+        <LinxWordmark width={80} height={34} />
         <TouchableOpacity
           style={styles.searchButton}
           onPress={() => setShowSearch(true)}

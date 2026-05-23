@@ -1,10 +1,17 @@
 import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold, useFonts } from '@expo-google-fonts/inter';
 import { Session } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
+import * as Notifications from 'expo-notifications';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ErrorBoundary } from '../components/ErrorBoundary';
+import {
+  getNavigationFromNotification,
+  registerForPushNotifications,
+  savePushToken,
+  setupNotificationHandlers,
+} from '../lib/notifications';
 import { supabase } from '../lib/supabase';
 import { ToastProvider } from '../lib/toast';
 
@@ -16,6 +23,7 @@ export default function RootLayout() {
   const [onboardingChecked, setOnboardingChecked] = useState(false);
   const segments = useSegments();
   const router = useRouter();
+  const notificationResponseRef = useRef<Notifications.NotificationResponse | null>(null);
 
   let [fontsLoaded] = useFonts({
     Inter: Inter_400Regular,
@@ -45,19 +53,78 @@ export default function RootLayout() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Register for push notifications when user is authenticated
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const setupPushNotifications = async () => {
+      const token = await registerForPushNotifications();
+      if (token) {
+        await savePushToken(session.user.id, token);
+      }
+    };
+
+    setupPushNotifications();
+  }, [session?.user?.id]);
+
+  // Set up notification handlers
+  useEffect(() => {
+    const handleNotificationResponse = (response: Notifications.NotificationResponse) => {
+      // If app isn't ready yet, store the response to handle later
+      if (loading || !fontsLoaded || !session) {
+        notificationResponseRef.current = response;
+        return;
+      }
+
+      const navigation = getNavigationFromNotification(response);
+      if (navigation?.params?.id) {
+        router.push(navigation.route.replace('[id]', navigation.params.id) as any);
+      }
+    };
+
+    // Check for notification that launched the app
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (response) {
+        handleNotificationResponse(response);
+      }
+    });
+
+    const cleanup = setupNotificationHandlers(undefined, handleNotificationResponse);
+
+    return cleanup;
+  }, [loading, fontsLoaded, session, router]);
+
+  // Handle pending notification response after app is ready
+  useEffect(() => {
+    if (loading || !fontsLoaded || !session) return;
+
+    if (notificationResponseRef.current) {
+      const navigation = getNavigationFromNotification(notificationResponseRef.current);
+      if (navigation?.params?.id) {
+        router.push(navigation.route.replace('[id]', navigation.params.id) as any);
+      }
+      notificationResponseRef.current = null;
+    }
+  }, [loading, fontsLoaded, session, router]);
+
   useEffect(() => {
     if (loading || !fontsLoaded) return;
 
     const inAuthGroup = segments[0] === 'auth';
     const inOnboarding = segments[0] === 'onboarding';
     const inTabs = segments[0] === '(tabs)';
+    // These are valid authenticated screens outside of tabs
+    const inValidAuthenticatedScreen = ['followers', 'user', 'course', 'round', 'tagged', 'bookmarks', 'edit-profile', 'add-round', 'edit-round'].includes(segments[0] as string);
 
     if (!session && !inAuthGroup) {
       // Not logged in - redirect to login
       setOnboardingChecked(false);
       router.replace('/auth/login');
-    } else if (session && !onboardingChecked && (inAuthGroup || (!inOnboarding && !inTabs))) {
-      // Logged in but haven't checked onboarding yet - check now
+    } else if (session && !onboardingChecked && inAuthGroup) {
+      // Logged in but in auth screens - check onboarding
+      checkOnboarding();
+    } else if (session && !onboardingChecked && !inOnboarding && !inTabs && !inValidAuthenticatedScreen) {
+      // Logged in, not in any valid screen - check onboarding
       checkOnboarding();
     }
   }, [session, segments, loading, fontsLoaded, onboardingChecked]);

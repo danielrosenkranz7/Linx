@@ -2,6 +2,14 @@
   "cli": {
     "version": ">= 3.0.0"
   },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "danielrosenkranz7@gmail.com",
+        "ascAppId": "6768371887"
+      }
+    }
+  },
   "build": {
     "development": {
       "developmentClient": true,

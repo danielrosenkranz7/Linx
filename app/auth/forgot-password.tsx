@@ -55,11 +55,11 @@ export default function ForgotPasswordScreen() {
           </View>
           <Text style={styles.successTitle}>Check your email</Text>
           <Text style={styles.successText}>
-            We've sent a password reset link to{'\n'}
+            We&apos;ve sent a password reset link to{'\n'}
             <Text style={styles.emailText}>{email}</Text>
           </Text>
           <Text style={styles.successSubtext}>
-            Click the link in the email to reset your password. If you don't see it, check your spam folder.
+            Click the link in the email to reset your password. If you don&apos;t see it, check your spam folder.
           </Text>
 
           <TouchableOpacity
@@ -71,7 +71,7 @@ export default function ForgotPasswordScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity onPress={() => setSent(false)}>
-            <Text style={styles.link}>Didn't receive it? Try again</Text>
+            <Text style={styles.link}>Didn&apos;t receive it? Try again</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -93,7 +93,7 @@ export default function ForgotPasswordScreen() {
 
         <Text style={styles.title}>Forgot Password?</Text>
         <Text style={styles.subtitle}>
-          Enter your email and we'll send you a link to reset your password.
+          Enter your email and we&apos;ll send you a link to reset your password.
         </Text>
 
         <TextInput

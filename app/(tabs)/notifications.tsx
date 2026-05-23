@@ -218,7 +218,7 @@ export default function NotificationsScreen() {
             <Ionicons name="notifications-outline" size={64} color="#d1d5db" />
             <Text style={styles.emptyTitle}>No notifications yet</Text>
             <Text style={styles.emptySubtext}>
-              When someone follows you or interacts with your rounds, you'll see it here
+              When someone follows you or interacts with your rounds, you&apos;ll see it here
             </Text>
           </View>
         ) : (
