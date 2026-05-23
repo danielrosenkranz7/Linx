@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import Slider from '@react-native-community/slider';
 import { readAsStringAsync } from 'expo-file-system/legacy';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { decode } from 'base64-arraybuffer';
 import { useEffect, useState } from 'react';
@@ -99,20 +100,26 @@ export default function RatingScreen() {
 
     for (const uri of photoUris) {
       try {
-        // Read the file as base64
-        const base64 = await readAsStringAsync(uri, {
+        // Compress and resize image to reduce memory usage
+        const compressed = await ImageManipulator.manipulateAsync(
+          uri,
+          [{ resize: { width: 1200 } }],
+          { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+        );
+
+        // Read the compressed file as base64
+        const base64 = await readAsStringAsync(compressed.uri, {
           encoding: 'base64',
         });
 
         // Generate unique filename
-        const fileExt = uri.split('.').pop()?.toLowerCase() || 'jpg';
-        const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const fileName = `${userId}/${Date.now()}-${Math.random().toString(36).substring(7)}.jpg`;
 
         // Upload to Supabase Storage
-        const { data, error } = await supabase.storage
+        const { error } = await supabase.storage
           .from('round-photos')
           .upload(fileName, decode(base64), {
-            contentType: `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
+            contentType: 'image/jpeg',
           });
 
         if (error) {
