@@ -21,10 +21,14 @@ export default function DateSelectionScreen() {
     router.push({
       pathname: '/add-round/partners',
       params: {
-        courseId: course.id,
+        courseId: params.courseId || '',
         courseName: course.name,
         courseLocation: course.location,
         datePlayed: date.toISOString(),
+        // Pass through OSM data for new courses
+        osmId: params.osmId || '',
+        latitude: params.latitude || '',
+        longitude: params.longitude || '',
       },
     });
   };

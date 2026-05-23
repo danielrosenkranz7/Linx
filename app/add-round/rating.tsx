@@ -188,10 +188,47 @@ export default function RatingScreen() {
         uploadedPhotoUrls = await uploadPhotos(localPhotos, user.id);
       }
 
+      // Get or create course ID
+      let courseId = params.courseId as string;
+
+      // If no courseId but we have OSM data, create the course first
+      if (!courseId && params.osmId) {
+        const { data: newCourse, error: courseError } = await supabase
+          .from('courses')
+          .insert([{
+            name: params.courseName,
+            location: params.courseLocation,
+            latitude: parseFloat(params.latitude as string),
+            longitude: parseFloat(params.longitude as string),
+            osm_id: params.osmId,
+          }])
+          .select()
+          .single();
+
+        if (courseError) {
+          // Course might already exist, try to find it
+          const { data: existingCourse } = await supabase
+            .from('courses')
+            .select('id')
+            .eq('osm_id', params.osmId)
+            .single();
+
+          if (existingCourse) {
+            courseId = existingCourse.id;
+          } else {
+            handleError(courseError, 'Creating course');
+            setIsSubmitting(false);
+            return;
+          }
+        } else {
+          courseId = newCourse.id;
+        }
+      }
+
       // Create round object
       const roundData = {
         user_id: user.id,
-        course_id: params.courseId,
+        course_id: courseId,
         rating: rating,
         score: params.score ? parseInt(params.score as string) : null,
         date_played: params.datePlayed ? new Date(params.datePlayed as string).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],

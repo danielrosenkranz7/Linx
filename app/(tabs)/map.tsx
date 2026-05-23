@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
-import { useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import MapView, { Callout, Marker, Region } from 'react-native-maps';
 import { handleError } from '../../lib/errors';
@@ -142,6 +142,15 @@ export default function MapScreen() {
   useEffect(() => {
     initializeMap();
   }, []);
+
+  // Refresh courses when tab comes into focus (to update colors after posting)
+  useFocusEffect(
+    useCallback(() => {
+      if (lastSearchedRegion && !loading) {
+        loadCourses(lastSearchedRegion.latitude, lastSearchedRegion.longitude);
+      }
+    }, [lastSearchedRegion, loading])
+  );
 
   const initializeMap = async () => {
     try {
@@ -361,9 +370,20 @@ export default function MapScreen() {
   };
 
   const handleCoursePress = (course: Course) => {
-    // Only navigate to detail if it's a database course
     if (course.isFromDatabase) {
       router.push(`/course/${course.id}`);
+    } else {
+      // For OSM courses not in database, navigate to add-round flow
+      router.push({
+        pathname: '/add-round/date-selection',
+        params: {
+          osmId: course.id,
+          courseName: course.name,
+          courseLocation: course.location,
+          latitude: course.latitude.toString(),
+          longitude: course.longitude.toString(),
+        },
+      });
     }
   };
 
@@ -400,11 +420,9 @@ export default function MapScreen() {
                 longitude: course.longitude,
               }}
               pinColor={course.user_rating ? '#16a34a' : '#3b82f6'}
+              onCalloutPress={() => handleCoursePress(course)}
             >
-              <Callout
-                tooltip
-                onPress={() => handleCoursePress(course)}
-              >
+              <Callout tooltip>
                 <View style={styles.callout}>
                   <Text style={styles.calloutTitle}>{course.name}</Text>
                   <View style={styles.calloutDetails}>
@@ -436,7 +454,7 @@ export default function MapScreen() {
                   {course.isFromDatabase ? (
                     <Text style={styles.calloutTap}>Tap for details</Text>
                   ) : (
-                    <Text style={styles.calloutHint}>Log a round to add ratings</Text>
+                    <Text style={styles.calloutTap}>Tap to log a round</Text>
                   )}
                 </View>
               </Callout>
