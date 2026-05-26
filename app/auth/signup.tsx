@@ -116,7 +116,7 @@ export default function SignupScreen() {
             styles.input,
             focusedInput === 'password' && styles.inputFocused,
           ]}
-          placeholder="Password (min 8 characters)"
+          placeholder="Password (8+ chars, upper, lower, number)"
           placeholderTextColor="#9ca3af"
           value={password}
           onChangeText={setPassword}

@@ -150,7 +150,7 @@ export default function PartnersScreen() {
 
       <ScrollView style={styles.content}>
         {/* Friends List */}
-        <Text style={styles.sectionTitle}>Your Friends</Text>
+        <Text style={styles.sectionTitle}>Following</Text>
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="small" color="#16a34a" />
