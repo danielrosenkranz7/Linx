@@ -64,20 +64,7 @@ export default function ScoreScreen() {
     setPhotos(photos.filter((_, i) => i !== index));
   };
 
-  const handleContinue = () => {
-    // Validate score if provided
-    if (score) {
-      const scoreNum = parseInt(score, 10);
-      const isNineHoles = holes === 'front9' || holes === 'back9';
-      const minScore = isNineHoles ? 9 : 18;  // At least 1 per hole
-      const maxScore = isNineHoles ? 99 : 199; // Reasonable max
-
-      if (isNaN(scoreNum) || scoreNum < minScore || scoreNum > maxScore) {
-        toast.error(`Score must be between ${minScore} and ${maxScore} for ${isNineHoles ? '9' : '18'} holes`);
-        return;
-      }
-    }
-
+  const proceedToRating = () => {
     router.push({
       pathname: '/add-round/rating',
       params: {
@@ -88,6 +75,71 @@ export default function ScoreScreen() {
         notes: notes.trim(),
       },
     });
+  };
+
+  const handleContinue = () => {
+    // Validate score if provided
+    if (score) {
+      const scoreNum = parseInt(score, 10);
+      const isNineHoles = holes === 'front9' || holes === 'back9';
+
+      // Hard limits - absolutely impossible scores
+      const hardMin = isNineHoles ? 9 : 18;
+      const hardMax = isNineHoles ? 99 : 199;
+
+      // Soft limits - unusual but possible scores that warrant confirmation
+      const softMin = isNineHoles ? 27 : 55;
+      const softMax = isNineHoles ? 70 : 140;
+
+      if (isNaN(scoreNum) || scoreNum < hardMin || scoreNum > hardMax) {
+        toast.error(`Score must be between ${hardMin} and ${hardMax} for ${isNineHoles ? '9' : '18'} holes`);
+        return;
+      }
+
+      // Check if score looks like wrong hole count
+      if (!isNineHoles && scoreNum < softMin) {
+        // 18-hole score that looks like a 9-hole score
+        Alert.alert(
+          'Check Your Score',
+          `${scoreNum} seems low for 18 holes. Did you mean to select Front 9 or Back 9?`,
+          [
+            { text: 'Change to Front 9', onPress: () => setHoles('front9') },
+            { text: 'Keep 18 Holes', onPress: proceedToRating },
+            { text: 'Edit Score', style: 'cancel' },
+          ]
+        );
+        return;
+      }
+
+      if (isNineHoles && scoreNum > softMax) {
+        // 9-hole score that looks like an 18-hole score
+        Alert.alert(
+          'Check Your Score',
+          `${scoreNum} seems high for 9 holes. Did you mean to select 18 holes?`,
+          [
+            { text: 'Change to 18 Holes', onPress: () => setHoles('18') },
+            { text: 'Keep 9 Holes', onPress: proceedToRating },
+            { text: 'Edit Score', style: 'cancel' },
+          ]
+        );
+        return;
+      }
+
+      // Check for unusually high/low scores
+      if (scoreNum < softMin || scoreNum > softMax) {
+        Alert.alert(
+          'Unusual Score',
+          `${scoreNum} is an unusual score for ${isNineHoles ? '9' : '18'} holes. Continue anyway?`,
+          [
+            { text: 'Continue', onPress: proceedToRating },
+            { text: 'Edit Score', style: 'cancel' },
+          ]
+        );
+        return;
+      }
+    }
+
+    proceedToRating();
   };
 
   const handleSkip = () => {

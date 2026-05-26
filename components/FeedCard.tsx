@@ -670,7 +670,7 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
           }
         ]}>
           <Ionicons name="golf" size={20} color="#4b5563" />
-          <Text style={styles.ratingNumber}>{round.rating.toFixed(1)}</Text>
+          <Text style={styles.ratingNumber}>{round.rating.toFixed(1)}<Text style={styles.ratingScale}>/10</Text></Text>
         </View>
 
         {/* Right: Photos + Score */}
@@ -1262,6 +1262,11 @@ const styles = StyleSheet.create({
     color: '#4b5563',
     fontFamily: 'Inter',
     marginTop: 2,
+  },
+  ratingScale: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#9ca3af',
   },
   // Right Box (Photos + Score)
   rightBox: {

@@ -569,7 +569,7 @@ export default function ProfileScreen() {
                     <Text style={styles.top3Location}>{round.courses.location}</Text>
                   </View>
                   <View style={styles.top3Rating}>
-                    <Text style={styles.top3RatingText}>{round.rating.toFixed(1)}</Text>
+                    <Text style={styles.top3RatingText}>{round.rating.toFixed(1)}<Text style={styles.ratingScale}>/10</Text></Text>
                   </View>
                 </TouchableOpacity>
               );
@@ -768,14 +768,14 @@ export default function ProfileScreen() {
                   <View style={styles.roundRating}>
                     <Ionicons name="golf" size={16} color="#16a34a" />
                     <Text style={styles.roundRatingText}>
-                      {round.rating.toFixed(1)}
+                      {round.rating.toFixed(1)}<Text style={styles.ratingScale}>/10</Text>
                     </Text>
                   </View>
                 ) : (
                   <View style={styles.editControls}>
                     <View style={styles.sliderContainer}>
                       <Text style={styles.sliderValue}>
-                        {editedRatings[round.id]?.toFixed(1) || round.rating.toFixed(1)}
+                        {editedRatings[round.id]?.toFixed(1) || round.rating.toFixed(1)}/10
                       </Text>
                       <Slider
                         style={styles.slider}
@@ -1400,6 +1400,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#16a34a',
     fontFamily: 'Inter',
+  },
+  ratingScale: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#9ca3af',
   },
   editControls: {
     flexDirection: 'row',

@@ -36,7 +36,7 @@ export default function SignupScreen() {
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email: trimmedEmail,
         password,
         options: {
@@ -48,8 +48,13 @@ export default function SignupScreen() {
 
       if (error) {
         handleError(error, 'Signup');
+      } else if (data.session) {
+        // User is automatically logged in (email confirmation disabled)
+        // The auth listener in _layout.tsx will handle navigation
+        toast.success('Welcome to Linx!');
       } else {
-        Alert.alert('Success!', 'Account created! Check your email to confirm.', [
+        // Email confirmation is required
+        Alert.alert('Check your email', 'We sent you a confirmation link. Please verify your email to continue.', [
           { text: 'OK', onPress: () => router.replace('/auth/login') }
         ]);
       }

@@ -171,7 +171,7 @@ export default function HomeScreen() {
 
         roundsData = data || [];
       } else {
-        // Trending Nearby: all rounds, sorted by likes_count desc
+        // Trending: all rounds, sorted by likes_count desc
         const { data } = await supabase
           .from('rounds')
           .select(`
@@ -356,7 +356,7 @@ export default function HomeScreen() {
             style={[styles.toggleOption, selectedTab === 'trending' && styles.toggleOptionActive]}
             onPress={() => setSelectedTab('trending')}
           >
-            Trending Nearby
+            Trending
           </Text>
         </View>
       </View>

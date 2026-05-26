@@ -1,9 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Image, Modal, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Image, Modal, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import ZoomableImage from '../../components/ZoomableImage';
 import { getRatingColor } from '../../lib/colors';
 import { supabase } from '../../lib/supabase';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 export default function CourseDetailScreen() {
   const router = useRouter();
@@ -317,7 +321,7 @@ const loadCourseDetails = async () => {
             <View style={styles.ratingContainer}>
               <Ionicons name="golf" size={32} color="#16a34a" />
               <Text style={styles.ratingNumber}>
-                {course.average_rating.toFixed(1)}
+                {course.average_rating.toFixed(1)}<Text style={styles.ratingScale}>/10</Text>
               </Text>
               <Text style={styles.ratingCount}>
                 ({course.total_reviews || rounds.length})
@@ -568,21 +572,21 @@ const loadCourseDetails = async () => {
         animationType="fade"
         onRequestClose={() => setSelectedPhoto(null)}
       >
-        <View style={styles.photoViewerOverlay}>
-          <TouchableOpacity 
+        <GestureHandlerRootView style={styles.photoViewerOverlay}>
+          <TouchableOpacity
             style={styles.photoViewerClose}
             onPress={() => setSelectedPhoto(null)}
           >
             <Ionicons name="close" size={32} color="#fff" />
           </TouchableOpacity>
           {selectedPhoto && (
-            <Image 
-              source={{ uri: selectedPhoto }} 
-              style={styles.photoViewerImage}
-              resizeMode="contain"
+            <ZoomableImage
+              uri={selectedPhoto}
+              width={SCREEN_WIDTH}
+              height={SCREEN_WIDTH * 1.3}
             />
           )}
-        </View>
+        </GestureHandlerRootView>
       </Modal>
     </View>
   );
@@ -662,6 +666,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#16a34a',
     fontFamily: 'Inter',
+  },
+  ratingScale: {
+    fontSize: 18,
+    fontWeight: '500',
+    color: '#9ca3af',
   },
   ratingCount: {
     fontSize: 18,

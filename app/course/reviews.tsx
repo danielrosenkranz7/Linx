@@ -3,6 +3,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Dimensions,
   FlatList,
   Image,
   Modal,
@@ -11,7 +12,11 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import ZoomableImage from '../../components/ZoomableImage';
 import { supabase } from '../../lib/supabase';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 type Review = {
   id: string;
@@ -257,7 +262,7 @@ export default function CourseReviewsScreen() {
         animationType="fade"
         onRequestClose={() => setSelectedPhoto(null)}
       >
-        <View style={styles.photoViewerOverlay}>
+        <GestureHandlerRootView style={styles.photoViewerOverlay}>
           <TouchableOpacity
             style={styles.photoViewerClose}
             onPress={() => setSelectedPhoto(null)}
@@ -265,13 +270,13 @@ export default function CourseReviewsScreen() {
             <Ionicons name="close" size={32} color="#fff" />
           </TouchableOpacity>
           {selectedPhoto && (
-            <Image
-              source={{ uri: selectedPhoto }}
-              style={styles.photoViewerImage}
-              resizeMode="contain"
+            <ZoomableImage
+              uri={selectedPhoto}
+              width={SCREEN_WIDTH}
+              height={SCREEN_WIDTH * 1.3}
             />
           )}
-        </View>
+        </GestureHandlerRootView>
       </Modal>
     </View>
   );
