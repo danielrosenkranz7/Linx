@@ -126,7 +126,7 @@ export default function CourseReviewsScreen() {
         </View>
         <View style={styles.ratingBadge}>
           <Ionicons name="golf" size={16} color="#16a34a" />
-          <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
+          <Text style={styles.ratingText}>{item.rating.toFixed(1)}<Text style={styles.ratingScale}>/10</Text></Text>
         </View>
       </TouchableOpacity>
 
@@ -422,6 +422,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#16a34a',
     fontFamily: 'Inter',
+  },
+  ratingScale: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#9ca3af',
   },
   scoreText: {
     fontSize: 14,

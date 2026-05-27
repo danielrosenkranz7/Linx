@@ -1,6 +1,7 @@
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Alert, Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { handleError } from '../../lib/errors';
 import { supabase } from '../../lib/supabase';
 import { toast } from '../../lib/toast';
@@ -11,8 +12,15 @@ export default function SignupScreen() {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
+  const [appleAuthAvailable, setAppleAuthAvailable] = useState(false);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    if (Platform.OS === 'ios') {
+      AppleAuthentication.isAvailableAsync().then(setAppleAuthAvailable);
+    }
+  }, []);
 
   const handleSignup = async () => {
     const trimmedName = sanitizeName(name);
@@ -65,6 +73,49 @@ export default function SignupScreen() {
     }
   };
 
+  const handleAppleSignIn = async () => {
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (credential.identityToken) {
+        const { data, error } = await supabase.auth.signInWithIdToken({
+          provider: 'apple',
+          token: credential.identityToken,
+        });
+
+        if (error) {
+          handleError(error, 'Apple Sign In');
+          return;
+        }
+
+        if (data.user && credential.fullName) {
+          const fullName = [credential.fullName.givenName, credential.fullName.familyName]
+            .filter(Boolean)
+            .join(' ');
+
+          if (fullName) {
+            await supabase
+              .from('profiles')
+              .update({ name: fullName })
+              .eq('id', data.user.id);
+          }
+        }
+
+        toast.success('Welcome to Linx!');
+      }
+    } catch (error: any) {
+      if (error.code === 'ERR_REQUEST_CANCELED') {
+        return;
+      }
+      handleError(error, 'Apple Sign In');
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -76,6 +127,7 @@ export default function SignupScreen() {
           style={styles.logo}
           resizeMode="contain"
         />
+        <Text style={styles.appName}>Linx</Text>
         <Text style={styles.subtitle}>Start sharing your golf journey</Text>
 
         <TextInput
@@ -147,6 +199,32 @@ export default function SignupScreen() {
         >
           <Text style={styles.link}>Already have an account? Log in</Text>
         </TouchableOpacity>
+
+        <Text style={styles.termsText}>
+          By signing up, you agree to our{' '}
+          <Text style={styles.termsLink}>Terms of Service</Text>
+          {' '}and{' '}
+          <Text style={styles.termsLink}>Privacy Policy</Text>
+        </Text>
+
+        {/* Apple Sign In */}
+        {appleAuthAvailable && (
+          <>
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={12}
+              style={styles.appleButton}
+              onPress={handleAppleSignIn}
+            />
+          </>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -166,7 +244,15 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
+  },
+  appName: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#16a34a',
+    textAlign: 'center',
+    marginBottom: 4,
+    fontFamily: 'Inter',
   },
   subtitle: {
     fontSize: 16,
@@ -213,5 +299,37 @@ const styles = StyleSheet.create({
     color: '#16a34a',
     fontSize: 16,
     fontFamily: 'Inter',
+  },
+  termsText: {
+    textAlign: 'center',
+    fontSize: 12,
+    color: '#9ca3af',
+    marginTop: 24,
+    fontFamily: 'Inter',
+    lineHeight: 18,
+  },
+  termsLink: {
+    color: '#6b7280',
+    textDecorationLine: 'underline',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 20,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e5e7eb',
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+    color: '#9ca3af',
+    fontFamily: 'Inter',
+  },
+  appleButton: {
+    width: '100%',
+    height: 50,
   },
 });

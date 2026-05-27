@@ -398,14 +398,27 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
   };
 
   const handleDeleteComment = async (commentId: string) => {
-    try {
-      await supabase.from('comments').delete().eq('id', commentId);
+    Alert.alert(
+      'Delete Comment',
+      'Are you sure you want to delete this comment?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await supabase.from('comments').delete().eq('id', commentId);
 
-      setComments((prev) => prev.filter((c) => c.id !== commentId));
-      setCommentsCount((prev: number) => Math.max(0, prev - 1));
-    } catch {
-      toast.error('Failed to delete comment');
-    }
+              setComments((prev) => prev.filter((c) => c.id !== commentId));
+              setCommentsCount((prev: number) => Math.max(0, prev - 1));
+            } catch {
+              toast.error('Failed to delete comment');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleCommentLike = async (commentId: string) => {

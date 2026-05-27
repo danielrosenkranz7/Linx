@@ -86,8 +86,16 @@ const fetchCoursesFromOverpass = async (
         continue;
       }
 
+      // Words that indicate non-course facilities
+      const excludeKeywords = ['proshop', 'pro shop', 'driving range', 'range', 'mini golf', 'minigolf', 'putt putt', 'putting green', 'clubhouse', 'restaurant', 'bar', 'grill'];
+
       const courses: Course[] = data.elements
-        .filter((el: any) => el.tags?.name)
+        .filter((el: any) => {
+          if (!el.tags?.name) return false;
+          const nameLower = el.tags.name.toLowerCase();
+          // Exclude facilities that aren't actual courses
+          return !excludeKeywords.some(keyword => nameLower.includes(keyword));
+        })
         .map((el: any) => {
           const courseLat = el.center?.lat || el.lat;
           const courseLng = el.center?.lon || el.lon;
@@ -99,9 +107,15 @@ const fetchCoursesFromOverpass = async (
           const state = el.tags['addr:state'] || '';
           const location = [city, state].filter(Boolean).join(', ') || 'Golf Course';
 
+          // Normalize name to title case
+          const normalizedName = el.tags.name
+            .split(' ')
+            .map((word: string) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ');
+
           return {
             id: `osm-${el.id}`,
-            name: el.tags.name,
+            name: normalizedName,
             location,
             latitude: courseLat,
             longitude: courseLng,
@@ -463,14 +477,17 @@ export default function MapScreen() {
         </MapView>
 
         {/* Search Here button */}
-        {showSearchHere && (
+        {(showSearchHere || searching) && (
           <TouchableOpacity
             style={styles.searchHereButton}
             onPress={searchHere}
             disabled={searching}
           >
             {searching ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={styles.searchHereText}>Searching...</Text>
+              </>
             ) : (
               <>
                 <Ionicons name="search" size={16} color="#fff" />

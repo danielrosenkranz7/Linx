@@ -445,7 +445,7 @@ const loadCourseDetails = async () => {
           <View style={styles.expertsSection}>
             <View style={styles.expertsTitleRow}>
               <Ionicons name="trophy" size={14} color="#f59e0b" />
-              <Text style={styles.expertsTitle}>Course Experts ({new Date().getFullYear()})</Text>
+              <Text style={styles.expertsTitle}>Most Rounds This Year</Text>
             </View>
             <ScrollView
               horizontal
@@ -511,7 +511,7 @@ const loadCourseDetails = async () => {
                   }
                 ]}>
                   <Ionicons name="golf" size={16} color="#4b5563" />
-                  <Text style={styles.reviewRatingText}>{round.rating.toFixed(1)}</Text>
+                  <Text style={styles.reviewRatingText}>{round.rating.toFixed(1)}<Text style={styles.reviewRatingScale}>/10</Text></Text>
                 </View>
               </TouchableOpacity>
 
@@ -951,6 +951,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#4b5563',
     fontFamily: 'Inter',
+  },
+  reviewRatingScale: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#9ca3af',
   },
   reviewScore: {
     fontSize: 14,

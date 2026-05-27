@@ -466,11 +466,18 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>
-          {profile?.username ? `@${profile.username}` : profile?.name || 'Profile'}
-        </Text>
+        <Text style={styles.headerTitle}>Profile</Text>
         <TouchableOpacity
-          onPress={() => supabase.auth.signOut()}
+          onPress={() => {
+            Alert.alert(
+              'Sign Out',
+              'Are you sure you want to sign out?',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Sign Out', style: 'destructive', onPress: () => supabase.auth.signOut() },
+              ]
+            );
+          }}
           accessibilityLabel="Sign out"
           accessibilityRole="button"
         >

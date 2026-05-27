@@ -1,16 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Alert, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Linking, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useDebounce } from '../hooks/useDebounce';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
+import { validateImageFile } from '../lib/validation';
 
 export default function EditProfileScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const [avatarUrl, setAvatarUrl] = useState('');
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [bio, setBio] = useState('');
@@ -52,6 +56,7 @@ export default function EditProfileScreen() {
         .single();
 
       if (profileData) {
+        setAvatarUrl(profileData.avatar_url || '');
         setName(profileData.name || '');
         setUsername(profileData.username || '');
         setBio(profileData.bio || '');
@@ -75,6 +80,86 @@ export default function EditProfileScreen() {
       // Profile load error - will show empty form
     } finally {
       setLoading(false);
+    }
+  };
+
+  const pickProfileImage = async () => {
+    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+    if (permissionResult.granted === false) {
+      Alert.alert('Permission Required', 'Please allow access to your photo library.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+      base64: true,
+    });
+
+    if (!result.canceled && result.assets[0].base64) {
+      const imageUri = result.assets[0].uri;
+      const base64 = result.assets[0].base64;
+      const fileSize = result.assets[0].fileSize;
+
+      const validation = validateImageFile(imageUri, fileSize, 5);
+      if (!validation.isValid) {
+        toast.error(validation.error || 'Invalid image');
+        return;
+      }
+
+      // Show local preview immediately
+      setAvatarUrl(imageUri);
+      setUploadingAvatar(true);
+
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('Not authenticated');
+
+        const fileExt = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+
+        // Decode base64 to Uint8Array
+        const binaryString = atob(base64);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(fileName, bytes, {
+            contentType: `image/${fileExt === 'jpg' ? 'jpeg' : fileExt}`,
+            upsert: true,
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: urlData } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(fileName);
+
+        const publicUrl = urlData.publicUrl;
+
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({ avatar_url: publicUrl })
+          .eq('id', user.id);
+
+        if (updateError) throw updateError;
+
+        setAvatarUrl(publicUrl);
+        toast.success('Photo updated!');
+      } catch (error) {
+        console.error('Error uploading avatar:', error);
+        toast.error('Failed to upload photo');
+        // Revert to previous avatar
+        loadProfile();
+      } finally {
+        setUploadingAvatar(false);
+      }
     }
   };
 
@@ -286,6 +371,25 @@ export default function EditProfileScreen() {
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Profile Photo */}
+        <View style={styles.avatarSection}>
+          <TouchableOpacity onPress={pickProfileImage} style={styles.avatarContainer} disabled={uploadingAvatar}>
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarPlaceholderText}>
+                  {name?.[0]?.toUpperCase() || '?'}
+                </Text>
+              </View>
+            )}
+            <View style={[styles.avatarEditBadge, uploadingAvatar && styles.avatarEditBadgeUploading]}>
+              <Ionicons name={uploadingAvatar ? 'hourglass' : 'camera'} size={16} color="#fff" />
+            </View>
+          </TouchableOpacity>
+          <Text style={styles.avatarHint}>Tap to change photo</Text>
+        </View>
+
         {/* Name */}
         <View style={styles.field}>
           <Text style={styles.label}>Name</Text>
@@ -591,6 +695,54 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  avatarSection: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  avatarContainer: {
+    position: 'relative',
+    marginBottom: 8,
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
+  avatarPlaceholder: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#16a34a',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarPlaceholderText: {
+    fontSize: 40,
+    fontWeight: '700',
+    color: '#fff',
+    fontFamily: 'Inter',
+  },
+  avatarEditBadge: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#16a34a',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 3,
+    borderColor: '#fff',
+  },
+  avatarEditBadgeUploading: {
+    backgroundColor: '#9ca3af',
+  },
+  avatarHint: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontFamily: 'Inter',
   },
   field: {
     marginBottom: 24,

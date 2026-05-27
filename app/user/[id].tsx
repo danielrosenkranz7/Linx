@@ -220,7 +220,7 @@ export default function UserProfileScreen() {
 
         {/* Rounds Section */}
         <View style={styles.roundsSection}>
-          <Text style={styles.roundsTitle}>Rankings</Text>
+          <Text style={styles.roundsTitle}>Top Courses</Text>
 
           {rounds.length === 0 ? (
             <View style={styles.emptyState}>
@@ -242,7 +242,7 @@ export default function UserProfileScreen() {
                 <View style={styles.roundRating}>
                   <Ionicons name="golf" size={16} color="#16a34a" />
                   <Text style={styles.roundRatingText}>
-                    {round.rating.toFixed(1)}
+                    {round.rating.toFixed(1)}<Text style={styles.roundRatingScale}>/10</Text>
                   </Text>
                 </View>
               </View>
@@ -498,5 +498,10 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#16a34a',
     fontFamily: 'Inter',
+  },
+  roundRatingScale: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: '#9ca3af',
   },
 });

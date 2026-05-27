@@ -1,5 +1,6 @@
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Image, KeyboardAvoidingView, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { handleError } from '../../lib/errors';
 import { supabase } from '../../lib/supabase';
@@ -9,8 +10,16 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [appleAuthAvailable, setAppleAuthAvailable] = useState(false);
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const router = useRouter();
+
+  useEffect(() => {
+    // Check if Apple Authentication is available (iOS 13+)
+    if (Platform.OS === 'ios') {
+      AppleAuthentication.isAvailableAsync().then(setAppleAuthAvailable);
+    }
+  }, []);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -36,6 +45,49 @@ export default function LoginScreen() {
     }
   };
 
+  const handleAppleSignIn = async () => {
+    try {
+      const credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [
+          AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+          AppleAuthentication.AppleAuthenticationScope.EMAIL,
+        ],
+      });
+
+      if (credential.identityToken) {
+        const { data, error } = await supabase.auth.signInWithIdToken({
+          provider: 'apple',
+          token: credential.identityToken,
+        });
+
+        if (error) {
+          handleError(error, 'Apple Sign In');
+          return;
+        }
+
+        // If this is a new user, update their name from Apple credential
+        if (data.user && credential.fullName) {
+          const fullName = [credential.fullName.givenName, credential.fullName.familyName]
+            .filter(Boolean)
+            .join(' ');
+
+          if (fullName) {
+            await supabase
+              .from('profiles')
+              .update({ name: fullName })
+              .eq('id', data.user.id);
+          }
+        }
+      }
+    } catch (error: any) {
+      if (error.code === 'ERR_REQUEST_CANCELED') {
+        // User cancelled - no error needed
+        return;
+      }
+      handleError(error, 'Apple Sign In');
+    }
+  };
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -47,6 +99,7 @@ export default function LoginScreen() {
           style={styles.logo}
           resizeMode="contain"
         />
+        <Text style={styles.appName}>Linx</Text>
         <Text style={styles.subtitle}>Your Golf Community</Text>
 
         <TextInput
@@ -111,6 +164,25 @@ export default function LoginScreen() {
         >
           <Text style={styles.link}>Don&apos;t have an account? Sign up</Text>
         </TouchableOpacity>
+
+        {/* Apple Sign In */}
+        {appleAuthAvailable && (
+          <>
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+              cornerRadius={12}
+              style={styles.appleButton}
+              onPress={handleAppleSignIn}
+            />
+          </>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
@@ -130,7 +202,15 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     alignSelf: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
+  },
+  appName: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#16a34a',
+    textAlign: 'center',
+    marginBottom: 4,
+    fontFamily: 'Inter',
   },
   subtitle: {
     fontSize: 16,
@@ -186,5 +266,25 @@ const styles = StyleSheet.create({
     color: '#16a34a',
     fontSize: 16,
     fontFamily: 'Inter',
+  },
+  divider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: 24,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#e5e7eb',
+  },
+  dividerText: {
+    marginHorizontal: 16,
+    fontSize: 14,
+    color: '#9ca3af',
+    fontFamily: 'Inter',
+  },
+  appleButton: {
+    width: '100%',
+    height: 50,
   },
 });

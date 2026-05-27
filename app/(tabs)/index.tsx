@@ -1,11 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
   Modal,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -17,9 +21,11 @@ import {
 import FeedCard from '../../components/FeedCard';
 import LinxWordmark from '../../components/LinxWordmark';
 import { handleError } from '../../lib/errors';
+import { registerForPushNotifications, savePushToken } from '../../lib/notifications';
 import { supabase } from '../../lib/supabase';
 
 const PAGE_SIZE = 10;
+const NOTIFICATION_PROMPT_KEY = 'linx_notification_prompt_shown';
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -30,6 +36,8 @@ export default function HomeScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [currentUserId, setCurrentUserId] = useState('');
+  const [userRoundsCount, setUserRoundsCount] = useState<number | null>(null);
+  const [showFirstRoundNudge, setShowFirstRoundNudge] = useState(false);
 
   // Search modal state
   const [showSearch, setShowSearch] = useState(false);
@@ -45,6 +53,77 @@ export default function HomeScreen() {
     setLoading(true);
     loadRounds(selectedTab, 0, true);
   }, [selectedTab]);
+
+  // Check if user has any rounds for first-round nudge
+  useEffect(() => {
+    if (currentUserId) {
+      checkUserRoundsCount();
+    }
+  }, [currentUserId]);
+
+  const checkUserRoundsCount = async () => {
+    const { count } = await supabase
+      .from('rounds')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', currentUserId);
+
+    setUserRoundsCount(count || 0);
+    setShowFirstRoundNudge(count === 0);
+  };
+
+  // Show notification permission prompt contextually
+  const promptForNotifications = async () => {
+    try {
+      // Check if we've already shown this prompt
+      const hasPrompted = await AsyncStorage.getItem(NOTIFICATION_PROMPT_KEY);
+      if (hasPrompted) return;
+
+      // Check current permission status
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status === 'granted') return;
+
+      // Show contextual prompt
+      Alert.alert(
+        'Enable Notifications',
+        'Get notified when someone likes your rounds, comments, or follows you!',
+        [
+          {
+            text: 'Not Now',
+            style: 'cancel',
+            onPress: async () => {
+              await AsyncStorage.setItem(NOTIFICATION_PROMPT_KEY, 'dismissed');
+            },
+          },
+          {
+            text: 'Enable',
+            onPress: async () => {
+              await AsyncStorage.setItem(NOTIFICATION_PROMPT_KEY, 'accepted');
+              const token = await registerForPushNotifications();
+              if (token && currentUserId) {
+                await savePushToken(currentUserId, token);
+              }
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error showing notification prompt:', error);
+    }
+  };
+
+  // Check if user should see notification prompt (after first engagement)
+  useEffect(() => {
+    const checkNotificationPrompt = async () => {
+      if (!currentUserId || Platform.OS === 'web') return;
+
+      // Only show prompt if user has at least 1 round (they're engaged)
+      if (userRoundsCount !== null && userRoundsCount > 0) {
+        promptForNotifications();
+      }
+    };
+
+    checkNotificationPrompt();
+  }, [currentUserId, userRoundsCount]);
 
   // Search when query changes
   useEffect(() => {
@@ -296,6 +375,31 @@ export default function HomeScreen() {
     );
   };
 
+  const renderFirstRoundNudge = () => {
+    if (!showFirstRoundNudge) return null;
+
+    return (
+      <View style={styles.nudgeCard}>
+        <View style={styles.nudgeIconContainer}>
+          <Ionicons name="golf" size={32} color="#16a34a" />
+        </View>
+        <View style={styles.nudgeContent}>
+          <Text style={styles.nudgeTitle}>Log your first round!</Text>
+          <Text style={styles.nudgeSubtitle}>
+            Rate a course you've played and start building your golf profile.
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={styles.nudgeButton}
+          onPress={() => router.push('/add-round')}
+        >
+          <Ionicons name="add" size={20} color="#fff" />
+          <Text style={styles.nudgeButtonText}>Add Round</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
   const renderEmpty = () => (
     <View style={styles.emptyState}>
       <Text style={styles.emptyStateText}>No rounds yet</Text>
@@ -360,6 +464,9 @@ export default function HomeScreen() {
           </Text>
         </View>
       </View>
+
+      {/* First Round Nudge */}
+      {selectedTab === 'teesheet' && renderFirstRoundNudge()}
 
       {/* Feed */}
       <FlatList
@@ -454,10 +561,10 @@ export default function HomeScreen() {
                     color="#d1d5db"
                   />
                   <Text style={styles.searchEmptyText}>
-                    {searchMode === 'users' ? 'Search for golfers' : 'Search for courses'}
+                    {searchMode === 'users' ? 'Search for golfers' : 'Search reviewed courses'}
                   </Text>
                   <Text style={styles.searchEmptySubtext}>
-                    {searchMode === 'users' ? 'Find friends by name or username' : 'Find courses by name or location'}
+                    {searchMode === 'users' ? 'Find friends by name or username' : 'Find courses with Linx reviews'}
                   </Text>
                 </View>
               )}
@@ -466,7 +573,9 @@ export default function HomeScreen() {
                 <View style={styles.searchEmptyState}>
                   <Ionicons name="search-outline" size={48} color="#d1d5db" />
                   <Text style={styles.searchEmptyText}>No results found</Text>
-                  <Text style={styles.searchEmptySubtext}>Try a different search term</Text>
+                  <Text style={styles.searchEmptySubtext}>
+                    {searchMode === 'users' ? 'Try a different search term' : 'Use the + button to find and log any course'}
+                  </Text>
                 </View>
               )}
 
@@ -611,6 +720,60 @@ const styles = StyleSheet.create({
     color: '#9ca3af',
     marginTop: 8,
     textAlign: 'center',
+    fontFamily: 'Inter',
+  },
+  // First Round Nudge
+  nudgeCard: {
+    marginHorizontal: 20,
+    marginTop: 8,
+    marginBottom: 12,
+    padding: 16,
+    backgroundColor: '#f0fdf4',
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#86efac',
+    flexDirection: 'column',
+    gap: 12,
+  },
+  nudgeIconContainer: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#dcfce7',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+  },
+  nudgeContent: {
+    alignItems: 'center',
+  },
+  nudgeTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a1a',
+    marginBottom: 4,
+    fontFamily: 'Inter',
+  },
+  nudgeSubtitle: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+    fontFamily: 'Inter',
+  },
+  nudgeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#16a34a',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+  },
+  nudgeButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#fff',
     fontFamily: 'Inter',
   },
   // Search Modal Styles
