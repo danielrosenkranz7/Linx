@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Dimensions, Image, Modal, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ZoomableImage from '../../components/ZoomableImage';
 import { getRatingColor } from '../../lib/colors';
 import { supabase } from '../../lib/supabase';
@@ -572,7 +571,7 @@ const loadCourseDetails = async () => {
         animationType="fade"
         onRequestClose={() => setSelectedPhoto(null)}
       >
-        <GestureHandlerRootView style={styles.photoViewerOverlay}>
+        <View style={styles.photoViewerOverlay}>
           <TouchableOpacity
             style={styles.photoViewerClose}
             onPress={() => setSelectedPhoto(null)}
@@ -586,7 +585,7 @@ const loadCourseDetails = async () => {
               height={SCREEN_WIDTH * 1.3}
             />
           )}
-        </GestureHandlerRootView>
+        </View>
       </Modal>
     </View>
   );

@@ -18,7 +18,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { getRatingColor } from '../lib/colors';
 import { supabase } from '../lib/supabase';
 import { toast } from '../lib/toast';
@@ -938,7 +937,7 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
         presentationStyle="fullScreen"
         onRequestClose={() => setShowPhotoModal(false)}
       >
-        <GestureHandlerRootView style={styles.photoModalContainer}>
+        <View style={styles.photoModalContainer}>
           {/* Header */}
           <View style={styles.photoModalHeader}>
             <TouchableOpacity
@@ -1007,7 +1006,7 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
               ))}
             </ScrollView>
           )}
-        </GestureHandlerRootView>
+        </View>
       </Modal>
 
       {/* Report Modal */}

@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import ZoomableImage from '../../components/ZoomableImage';
 import { supabase } from '../../lib/supabase';
 
@@ -262,7 +261,7 @@ export default function CourseReviewsScreen() {
         animationType="fade"
         onRequestClose={() => setSelectedPhoto(null)}
       >
-        <GestureHandlerRootView style={styles.photoViewerOverlay}>
+        <View style={styles.photoViewerOverlay}>
           <TouchableOpacity
             style={styles.photoViewerClose}
             onPress={() => setSelectedPhoto(null)}
@@ -276,7 +275,7 @@ export default function CourseReviewsScreen() {
               height={SCREEN_WIDTH * 1.3}
             />
           )}
-        </GestureHandlerRootView>
+        </View>
       </Modal>
     </View>
   );
