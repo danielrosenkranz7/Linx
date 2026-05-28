@@ -466,22 +466,15 @@ export default function ProfileScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
+        <Text style={styles.headerTitle}>
+          {profile?.username ? `@${profile.username}` : 'Profile'}
+        </Text>
         <TouchableOpacity
-          onPress={() => {
-            Alert.alert(
-              'Sign Out',
-              'Are you sure you want to sign out?',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Sign Out', style: 'destructive', onPress: () => supabase.auth.signOut() },
-              ]
-            );
-          }}
-          accessibilityLabel="Sign out"
+          onPress={() => router.push('/edit-profile')}
+          accessibilityLabel="Settings"
           accessibilityRole="button"
         >
-          <Ionicons name="log-out-outline" size={24} color="#ef4444" />
+          <Ionicons name="settings-outline" size={24} color="#6b7280" />
         </TouchableOpacity>
       </View>
 
@@ -504,9 +497,6 @@ export default function ProfileScreen() {
           </TouchableOpacity>
 
           <Text style={styles.name}>{profile?.name || 'Anonymous'}</Text>
-          {profile?.username && (
-            <Text style={styles.username}>@{profile.username}</Text>
-          )}
           {profile?.bio && (
             <Text style={styles.bio}>{profile.bio}</Text>
           )}
@@ -576,7 +566,7 @@ export default function ProfileScreen() {
                     <Text style={styles.top3Location}>{round.courses.location}</Text>
                   </View>
                   <View style={styles.top3Rating}>
-                    <Text style={styles.top3RatingText}>{round.rating.toFixed(1)}<Text style={styles.ratingScale}>/10</Text></Text>
+                    <Text style={styles.top3RatingText}>{round.rating.toFixed(1)}</Text>
                   </View>
                 </TouchableOpacity>
               );
@@ -724,6 +714,26 @@ export default function ProfileScreen() {
             </View>
             <Ionicons name="chevron-forward" size={20} color="#9ca3af" />
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.settingsItem, styles.signOutItem]}
+            onPress={() => {
+              Alert.alert(
+                'Sign Out',
+                'Are you sure you want to sign out?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Sign Out', style: 'destructive', onPress: () => supabase.auth.signOut() },
+                ]
+              );
+            }}
+            accessibilityLabel="Sign out"
+            accessibilityRole="button"
+          >
+            <View style={styles.settingsItemLeft}>
+              <Ionicons name="log-out-outline" size={20} color="#ef4444" />
+              <Text style={styles.signOutText}>Sign Out</Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* Rounds Section */}
@@ -775,14 +785,14 @@ export default function ProfileScreen() {
                   <View style={styles.roundRating}>
                     <Ionicons name="golf" size={16} color="#16a34a" />
                     <Text style={styles.roundRatingText}>
-                      {round.rating.toFixed(1)}<Text style={styles.ratingScale}>/10</Text>
+                      {round.rating.toFixed(1)}
                     </Text>
                   </View>
                 ) : (
                   <View style={styles.editControls}>
                     <View style={styles.sliderContainer}>
                       <Text style={styles.sliderValue}>
-                        {editedRatings[round.id]?.toFixed(1) || round.rating.toFixed(1)}/10
+                        {editedRatings[round.id]?.toFixed(1) || round.rating.toFixed(1)}
                       </Text>
                       <Slider
                         style={styles.slider}
@@ -1316,6 +1326,17 @@ const styles = StyleSheet.create({
   settingsItemText: {
     fontSize: 16,
     color: '#1a1a1a',
+    fontFamily: 'Inter',
+  },
+  signOutItem: {
+    marginTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#e5e7eb',
+    paddingTop: 20,
+  },
+  signOutText: {
+    fontSize: 16,
+    color: '#ef4444',
     fontFamily: 'Inter',
   },
   roundsSection: {

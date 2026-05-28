@@ -242,7 +242,7 @@ export default function UserProfileScreen() {
                 <View style={styles.roundRating}>
                   <Ionicons name="golf" size={16} color="#16a34a" />
                   <Text style={styles.roundRatingText}>
-                    {round.rating.toFixed(1)}<Text style={styles.roundRatingScale}>/10</Text>
+                    {round.rating.toFixed(1)}
                   </Text>
                 </View>
               </View>

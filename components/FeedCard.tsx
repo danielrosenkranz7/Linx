@@ -682,7 +682,7 @@ export default function FeedCard({ round, currentUserId, isLiked: initialIsLiked
           }
         ]}>
           <Ionicons name="golf" size={20} color="#4b5563" />
-          <Text style={styles.ratingNumber}>{round.rating.toFixed(1)}<Text style={styles.ratingScale}>/10</Text></Text>
+          <Text style={styles.ratingNumber}>{round.rating.toFixed(1)}</Text>
         </View>
 
         {/* Right: Photos + Score */}

@@ -125,7 +125,7 @@ export default function CourseReviewsScreen() {
         </View>
         <View style={styles.ratingBadge}>
           <Ionicons name="golf" size={16} color="#16a34a" />
-          <Text style={styles.ratingText}>{item.rating.toFixed(1)}<Text style={styles.ratingScale}>/10</Text></Text>
+          <Text style={styles.ratingText}>{item.rating.toFixed(1)}</Text>
         </View>
       </TouchableOpacity>
 
