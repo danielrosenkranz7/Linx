@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Linx — Your Golf Community</title>
-  <meta name="description" content="Linx connects golfers to track rounds, share scores, and find their next game." />
+  <meta name="description" content="Linx connects golfers to track rounds, share scores, and find their next game. Download free on the App Store." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
@@ -100,6 +100,18 @@
       opacity: 0; animation: fadeUp 0.6s ease forwards 0.4s;
     }
 
+    .app-store-badge {
+      display: inline-block;
+      transition: all 0.2s;
+    }
+    .app-store-badge:hover {
+      transform: translateY(-2px);
+    }
+    .app-store-badge img {
+      height: 50px;
+      width: auto;
+    }
+
     .btn-primary {
       display: inline-flex; align-items: center; gap: 10px;
       background: var(--green-dark); color: white;
@@ -123,8 +135,53 @@
     }
     .btn-secondary:hover { color: var(--text); }
 
+    /* SCREENSHOTS */
+    .screenshots {
+      padding: 80px 48px;
+      background: white;
+      overflow: hidden;
+    }
+    .screenshots-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .screenshots .section-label {
+      text-align: center;
+      justify-content: center;
+    }
+    .screenshots .section-label::before { display: none; }
+    .screenshots h2 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(28px, 3vw, 40px);
+      letter-spacing: -1px; line-height: 1.2;
+      text-align: center;
+      margin-bottom: 50px;
+    }
+    .screenshots-grid {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    .screenshot-item {
+      flex: 0 0 auto;
+      width: 220px;
+      border-radius: 24px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+      transition: transform 0.3s ease;
+    }
+    .screenshot-item:hover {
+      transform: translateY(-8px);
+    }
+    .screenshot-item img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
     /* FEATURES */
-    .features { padding: 100px 48px; background: white; }
+    .features { padding: 100px 48px; background: var(--cream); }
     .section-label {
       font-size: 11px; letter-spacing: 0.13em; text-transform: uppercase;
       color: var(--green-dark); font-weight: 500; margin-bottom: 14px;
@@ -145,39 +202,37 @@
     .feature-item h3 { font-family: 'Playfair Display', serif; font-size: 19px; margin-bottom: 10px; letter-spacing: -0.3px; }
     .feature-item p { font-size: 14px; line-height: 1.75; color: var(--text-muted); font-weight: 300; }
 
-    /* WAITLIST */
-    .waitlist { padding: 100px 48px; background: var(--green-dark); position: relative; overflow: hidden; }
-    .waitlist::before {
+    /* DOWNLOAD CTA */
+    .download-cta { padding: 100px 48px; background: var(--green-dark); position: relative; overflow: hidden; }
+    .download-cta::before {
       content: ''; position: absolute; top: -150px; right: -150px;
       width: 500px; height: 500px;
       background: radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%);
       pointer-events: none;
     }
-    .waitlist-inner { max-width: 520px; margin: 0 auto; text-align: center; position: relative; }
-    .waitlist h2 {
+    .download-cta-inner { max-width: 520px; margin: 0 auto; text-align: center; position: relative; }
+    .download-cta h2 {
       font-family: 'Playfair Display', serif;
       font-size: clamp(30px, 3.5vw, 48px);
       color: white; letter-spacing: -1.5px; line-height: 1.1; margin-bottom: 14px;
     }
-    .waitlist h2 em { font-style: italic; color: var(--green-light); }
-    .waitlist p { font-size: 16px; color: rgba(255,255,255,0.55); font-weight: 300; margin-bottom: 36px; line-height: 1.65; }
-    .waitlist-form { display: flex; gap: 10px; max-width: 420px; margin: 0 auto; }
-    .waitlist-form input {
-      flex: 1; padding: 13px 20px; border-radius: 100px;
-      border: 1.5px solid rgba(255,255,255,0.18);
-      background: rgba(255,255,255,0.08); color: white;
-      font-family: 'Inter', sans-serif; font-size: 14px; outline: none; transition: border-color 0.2s;
+    .download-cta h2 em { font-style: italic; color: var(--green-light); }
+    .download-cta p { font-size: 16px; color: rgba(255,255,255,0.7); font-weight: 300; margin-bottom: 36px; line-height: 1.65; }
+    .download-cta .app-store-badge img {
+      height: 54px;
     }
-    .waitlist-form input::placeholder { color: rgba(255,255,255,0.32); }
-    .waitlist-form input:focus { border-color: rgba(255,255,255,0.45); }
-    .waitlist-form button {
-      padding: 13px 22px; border-radius: 100px;
+    .download-cta .app-store-badge:hover {
+      transform: translateY(-3px) scale(1.02);
+    }
+    .btn-contact {
+      display: inline-flex; align-items: center; gap: 10px;
       background: white; color: var(--green-dark);
-      font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 500;
-      border: none; cursor: pointer; white-space: nowrap; transition: all 0.2s;
+      font-family: 'Inter', sans-serif;
+      font-size: 15px; font-weight: 500;
+      padding: 14px 26px; border-radius: 100px;
+      text-decoration: none; transition: all 0.2s;
     }
-    .waitlist-form button:hover { background: var(--green-light); color: white; }
-    .waitlist-note { font-size: 11px; color: rgba(255,255,255,0.3); margin-top: 14px; }
+    .btn-contact:hover { background: var(--green-light); color: white; }
 
     /* FOOTER */
     footer {
@@ -202,10 +257,11 @@
       nav { padding: 16px 24px; }
       .hero { padding: 100px 24px 60px; }
       .hero-desc { margin: 0 auto 40px; }
+      .screenshots { padding: 60px 24px; }
+      .screenshot-item { width: 160px; }
       .features { padding: 60px 24px; }
       .features-grid { grid-template-columns: 1fr; gap: 32px; }
-      .waitlist { padding: 60px 24px; }
-      .waitlist-form { flex-direction: column; }
+      .download-cta { padding: 60px 24px; }
       footer { flex-direction: column; gap: 18px; text-align: center; padding: 28px 24px; }
     }
   </style>
@@ -214,7 +270,7 @@
 
   <nav>
     <a href="/" class="logo"><img src="icon.png" alt="Linx"></a>
-    <a href="#waitlist" class="nav-cta">Join Waitlist</a>
+    <a href="https://apps.apple.com/us/app/linx-golf/id6768371887" class="nav-cta">Download</a>
   </nav>
 
   <section class="hero">
@@ -231,20 +287,36 @@
       <div class="hero-tagline">Your Golf Community</div>
       <p class="hero-desc">Linx connects golfers to track rounds, share scores, and find their next game. Built by golfers, for golfers.</p>
       <div class="hero-actions">
-        <a href="#waitlist" class="btn-primary">
-          Join the Waitlist
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </a>
-        <a href="mailto:hello@linxgolf.app" class="btn-secondary">
-          Contact us
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 4l5 4 5-4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><rect x="1" y="3" width="12" height="8" rx="1.5" stroke="currentColor" stroke-width="1.2"/></svg>
+        <a href="https://apps.apple.com/us/app/linx-golf/id6768371887" class="app-store-badge">
+          <img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg" alt="Download on the App Store">
         </a>
       </div>
     </div>
   </section>
 
+  <section class="screenshots">
+    <div class="screenshots-inner">
+      <div class="section-label">See it in action</div>
+      <h2>Built for golfers, by golfers</h2>
+      <div class="screenshots-grid">
+        <div class="screenshot-item">
+          <img src="screenshots/feed.png" alt="Your Golf Community Feed">
+        </div>
+        <div class="screenshot-item">
+          <img src="screenshots/map.png" alt="Find Courses Near You">
+        </div>
+        <div class="screenshot-item">
+          <img src="screenshots/rating.png" alt="Rate Every Course">
+        </div>
+        <div class="screenshot-item">
+          <img src="screenshots/profile.png" alt="Your Golf Profile">
+        </div>
+      </div>
+    </div>
+  </section>
+
   <section class="features">
-    <div class="section-label">What we're building</div>
+    <div class="section-label">Why Linx</div>
     <h2>Track rounds. Share scores. Find your game.</h2>
     <div class="features-grid">
       <div class="feature-item">
@@ -265,21 +337,20 @@
     </div>
   </section>
 
-  <section class="waitlist" id="waitlist">
-    <div class="waitlist-inner">
-      <h2>Be the first<br/><em>on the tee.</em></h2>
-      <p>Linx is coming soon. Join the waitlist for early access when we launch.</p>
-      <form class="waitlist-form" action="https://formspree.io/f/hello@linxgolf.app" method="POST">
-        <input type="email" name="email" placeholder="your@email.com" required />
-        <button type="submit">Join Waitlist</button>
-      </form>
-      <div class="waitlist-note">No spam. Just updates when we're ready.</div>
+  <section class="download-cta" id="download">
+    <div class="download-cta-inner">
+      <h2>Ready to<br/><em>Tee Off?</em></h2>
+      <p>Join the Linx community. Track your rounds, discover courses, and connect with golfers near you.</p>
+      <a href="https://apps.apple.com/us/app/linx-golf/id6768371887" class="app-store-badge">
+        <img src="https://developer.apple.com/assets/elements/badges/download-on-the-app-store.svg" alt="Download on the App Store">
+      </a>
     </div>
   </section>
 
   <footer>
     <a href="/" class="logo"><img src="icon.png" alt="Linx"></a>
     <ul class="footer-links">
+      <li><a href="https://apps.apple.com/us/app/linx-golf/id6768371887">App Store</a></li>
       <li><a href="mailto:hello@linxgolf.app">Contact</a></li>
       <li><a href="privacy-policy.html">Privacy</a></li>
       <li><a href="terms-of-service.html">Terms</a></li>
